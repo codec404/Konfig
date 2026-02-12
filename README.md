@@ -84,6 +84,7 @@ See individual service READMEs:
 
 ## License
 
+```
 MIT
 ```
 
@@ -91,6 +92,7 @@ MIT
 
 Now you should have:
 
+```
 dynamic-config-service/
 ├── docker-compose.yml          # Docker Compose configuration
 ├── .env                        # Environment variables
