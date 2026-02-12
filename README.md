@@ -90,7 +90,7 @@ MIT
 ## Directory Structure
 
 Now you should have:
-```
+
 dynamic-config-service/
 ├── docker-compose.yml          # Docker Compose configuration
 ├── .env                        # Environment variables
@@ -108,3 +108,5 @@ dynamic-config-service/
 │       └── validation-service.Dockerfile
 └── prometheus/
     └── prometheus.yml         # Prometheus configuration
+
+``` 
