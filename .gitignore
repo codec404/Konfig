@@ -1,0 +1,46 @@
+# Build artifacts
+build/
+bin/
+lib/
+*.o
+*.so
+*.a
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Go
+cmd/configctl/configctl
+*.exe
+
+# Environment
+.env
+.local
+
+# Dependencies
+prometheus-cpp/
+redis-plus-plus/
+
+# Docker volumes (if using local bind mounts)
+data/
+
+# Test coverage
+coverage/
+*.out
