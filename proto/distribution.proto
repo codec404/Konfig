@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package configservice;
+
+import "proto/config.proto";
+
+option go_package = "github.com/codec404/Konfig/proto";
+
+// Distribution Service - pushes configs to client SDKs
+service DistributionService {
+    // Client subscribes to config updates (bidirectional streaming)
+    rpc Subscribe(stream SubscribeRequest) returns (stream ConfigUpdate);
+    
+    // Client reports health during rollout
+    rpc ReportHealth(HealthReport) returns (HealthAck);
+    
+    // Heartbeat to keep connection alive
+    rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// Subscribe request from client
+message SubscribeRequest {
+    string service_name = 1;
+    string instance_id = 2;         // Unique instance ID
+    int64 current_version = 3;      // Current config version (0 if none)
+    map<string, string> metadata = 4; // Instance metadata (hostname, etc.)
+}
+
+// Config update pushed to client
+message ConfigUpdate {
+    ConfigData config = 1;
+    bool force_reload = 2;          // Force immediate reload
+    UpdateType update_type = 3;
+}
+
+enum UpdateType {
+    NEW_CONFIG = 0;                 // Brand new config
+    VERSION_UPDATE = 1;             // Version change
+    ROLLBACK = 2;                   // Rollback to previous version
+    HEARTBEAT_ACK = 3;              // Acknowledgment of heartbeat
+}
+
+// Health acknowledgment
+message HealthAck {
+    bool received = 1;
+    string message = 2;
+}
+
+// Heartbeat request
+message HeartbeatRequest {
+    string service_name = 1;
+    string instance_id = 2;
+    int64 timestamp = 3;
+}
+
+message HeartbeatResponse {
+    bool alive = 1;
+    int64 server_timestamp = 2;
+}

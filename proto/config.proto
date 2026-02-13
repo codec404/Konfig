@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package configservice;
+
+option go_package = "github.com/codec404/Konfig/proto";
+
+// Configuration data structure
+message ConfigData {
+    string config_id = 1;           // Unique identifier (e.g., "app-config-v3")
+    string service_name = 2;        // Target service name
+    int64 version = 3;              // Version number
+    string content = 4;             // Actual config content (JSON/YAML/TOML)
+    string format = 5;              // Format: "json", "yaml", "toml"
+    string content_hash = 6;        // SHA256 hash for integrity
+    int64 created_at = 7;           // Unix timestamp
+    string created_by = 8;          // User/system that created it
+}
+
+// Configuration metadata (stored in PostgreSQL)
+message ConfigMetadata {
+    string config_id = 1;
+    string service_name = 2;
+    int64 version = 3;
+    string format = 4;
+    int64 created_at = 5;
+    string created_by = 6;
+    string description = 7;
+    bool is_active = 8;
+}
+
+// Rollout strategy
+enum RolloutStrategy {
+    ALL_AT_ONCE = 0;               // Push to all instances immediately
+    CANARY = 1;                    // Push to small percentage first
+    PERCENTAGE = 2;                // Gradual percentage-based rollout
+}
+
+// Rollout status
+enum RolloutStatus {
+    PENDING = 0;
+    IN_PROGRESS = 1;
+    COMPLETED = 2;
+    FAILED = 3;
+    ROLLED_BACK = 4;
+}
+
+// Rollout state
+message RolloutState {
+    string config_id = 1;
+    RolloutStrategy strategy = 2;
+    int32 target_percentage = 3;   // Target percentage (0-100)
+    int32 current_percentage = 4;  // Current rollout percentage
+    RolloutStatus status = 5;
+    int64 started_at = 6;
+    int64 completed_at = 7;
+}
+
+// Service instance information
+message ServiceInstance {
+    string service_name = 1;
+    string instance_id = 2;        // Unique instance identifier
+    int64 current_config_version = 3;
+    int64 last_heartbeat = 4;
+    string status = 5;             // "connected", "disconnected", "unhealthy"
+    map<string, string> metadata = 6; // Additional instance info
+}
+
+// Health status
+enum HealthStatus {
+    HEALTHY = 0;
+    DEGRADED = 1;
+    UNHEALTHY = 2;
+}
+
+// Health report from service instance
+message HealthReport {
+    string service_name = 1;
+    string instance_id = 2;
+    int64 config_version = 3;
+    HealthStatus status = 4;
+    string error_message = 5;
+    map<string, string> metrics = 6;
+    int64 timestamp = 7;
+}
