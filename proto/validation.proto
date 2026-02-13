@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package configservice;
+
+option go_package = "github.com/codec404/Konfig/proto";
+
+// Validation Service - validates configurations
+service ValidationService {
+    // Validate configuration content
+    rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
+    
+    // Validate against schema
+    rpc ValidateSchema(ValidateSchemaRequest) returns (ValidateSchemaResponse);
+}
+
+message ValidateConfigRequest {
+    string content = 1;
+    string format = 2;              // "json", "yaml", "toml"
+    string schema = 3;              // Optional JSON schema
+}
+
+message ValidateConfigResponse {
+    bool valid = 1;
+    repeated ValidationError errors = 2;
+    repeated string warnings = 3;
+}
+
+message ValidationError {
+    string field = 1;               // Field path (e.g., "database.port")
+    string message = 2;             // Error message
+    string error_type = 3;          // "syntax", "schema", "semantic"
+}
+
+message ValidateSchemaRequest {
+    string schema = 1;              // JSON schema to validate
+}
+
+message ValidateSchemaResponse {
+    bool valid = 1;
+    string message = 2;
+}

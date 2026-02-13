@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+package configservice;
+
+import "proto/config.proto";
+
+option go_package = "github.com/codec404/Konfig/proto";
+
+// API Service - handles config uploads and management
+service ConfigAPIService {
+    // Upload a new configuration
+    rpc UploadConfig(UploadConfigRequest) returns (UploadConfigResponse);
+    
+    // Get configuration by ID
+    rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+    
+    // List configurations for a service
+    rpc ListConfigs(ListConfigsRequest) returns (ListConfigsResponse);
+    
+    // Delete a configuration
+    rpc DeleteConfig(DeleteConfigRequest) returns (DeleteConfigResponse);
+    
+    // Start a rollout
+    rpc StartRollout(StartRolloutRequest) returns (StartRolloutResponse);
+    
+    // Get rollout status
+    rpc GetRolloutStatus(GetRolloutStatusRequest) returns (GetRolloutStatusResponse);
+    
+    // Rollback to previous version
+    rpc Rollback(RollbackRequest) returns (RollbackResponse);
+}
+
+// Upload config request
+message UploadConfigRequest {
+    string service_name = 1;
+    string content = 2;             // Config content
+    string format = 3;              // "json", "yaml", "toml"
+    string created_by = 4;          // User/system uploading
+    string description = 5;         // Optional description
+    bool validate = 6;              // Validate before upload
+}
+
+message UploadConfigResponse {
+    string config_id = 1;
+    int64 version = 2;
+    bool success = 3;
+    string message = 4;
+    repeated string validation_errors = 5;
+}
+
+// Get config request
+message GetConfigRequest {
+    string config_id = 1;
+}
+
+message GetConfigResponse {
+    ConfigData config = 1;
+    bool success = 2;
+    string message = 3;
+}
+
+// List configs request
+message ListConfigsRequest {
+    string service_name = 1;
+    int32 limit = 2;                // Max results
+    int32 offset = 3;               // Pagination offset
+}
+
+message ListConfigsResponse {
+    repeated ConfigMetadata configs = 1;
+    int32 total_count = 2;
+    bool success = 3;
+}
+
+// Delete config request
+message DeleteConfigRequest {
+    string config_id = 1;
+}
+
+message DeleteConfigResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// Start rollout request
+message StartRolloutRequest {
+    string config_id = 1;
+    RolloutStrategy strategy = 2;
+    int32 target_percentage = 3;   // For PERCENTAGE strategy
+}
+
+message StartRolloutResponse {
+    bool success = 1;
+    string message = 2;
+    string rollout_id = 3;
+}
+
+// Get rollout status request
+message GetRolloutStatusRequest {
+    string config_id = 1;
+}
+
+message GetRolloutStatusResponse {
+    RolloutState rollout_state = 1;
+    repeated ServiceInstance instances = 2; // Instances affected
+    bool success = 3;
+}
+
+// Rollback request
+message RollbackRequest {
+    string service_name = 1;
+    int64 target_version = 2;       // Version to rollback to (0 = previous)
+}
+
+message RollbackResponse {
+    bool success = 1;
+    string message = 2;
+    string config_id = 3;
+}
