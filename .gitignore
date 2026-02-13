@@ -44,3 +44,6 @@ data/
 # Test coverage
 coverage/
 *.out
+
+# md files
+BRANCH_PROTECTION_SETUP.md
