@@ -14,6 +14,7 @@
 - **Password**: configpass
 
 ## Direct PostgreSQL Connection
+
 ```bash
 # From host machine
 psql -h localhost -p 5432 -U configuser -d configservice
@@ -24,6 +25,7 @@ make db-shell
 ```
 
 ## Redis
+
 ```bash
 # From host machine
 redis-cli -h localhost -p 6379
@@ -41,6 +43,7 @@ make redis-shell
 
 - URL: <http://localhost:3000>
 - Login: admin / admin
+
 
 ## Prometheus
 
