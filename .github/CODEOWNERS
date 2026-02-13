@@ -1,0 +1,19 @@
+# Default owners for everything
+*       @coded404
+
+# Proto definitions need careful review
+/proto/ @coded404
+
+# Infrastructure changes
+/docker/ @coded404
+/.github/ @coded404
+/docker-compose.yml @coded404
+
+# Core services
+/src/api-service/ @coded404
+/src/distribution-service/ @coded404
+/src/client-sdk/ @coded404
+
+# Documentation
+/docs/ @coded404
+*.md @coded404

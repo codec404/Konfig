@@ -1,0 +1,87 @@
+name: Auto PR Dev to Main
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  create-pr:
+    name: Create Dev → Main PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if PR already exists
+        id: check-pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_EXISTS=$(gh pr list --base main --head dev --state open --json number --jq length)
+          echo "pr_exists=$PR_EXISTS" >> $GITHUB_OUTPUT
+
+      - name: Get commits since last merge
+        id: get-commits
+        if: steps.check-pr.outputs.pr_exists == '0'
+        run: |
+          # Get the last commit message
+          LAST_COMMIT=$(git log -1 --pretty=%B)
+          
+          # Get list of commits since last main merge
+          COMMITS=$(git log --oneline origin/main..origin/dev --pretty=format:"- %s (%an)" | head -20)
+          
+          # Create PR body
+          cat > pr_body.md << 'PRBODY'
+          ## 🚀 Dev → Main Sync
+          
+          This PR contains changes from the `dev` branch ready to be merged into `main`.
+          
+          ### Recent Commits
+          
+          PRBODY
+          
+          echo "$COMMITS" >> pr_body.md
+          
+          cat >> pr_body.md << 'PRBODY'
+          
+          ### Checklist
+          
+          - [ ] All CI checks passed
+          - [ ] Code reviewed by at least one team member
+          - [ ] Documentation updated (if needed)
+          - [ ] No breaking changes (or properly documented)
+          
+          ### Testing
+          
+          - [ ] Tested locally
+          - [ ] Integration tests pass
+          - [ ] Docker containers start successfully
+          
+          ---
+          
+          **Auto-generated PR** • Merging this will deploy to production
+          PRBODY
+
+      - name: Create Pull Request
+        if: steps.check-pr.outputs.pr_exists == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --title "🔄 Dev → Main: $(date +'%Y-%m-%d %H:%M')" \
+            --body-file pr_body.md \
+            --base main \
+            --head dev \
+            --label "auto-pr,dev-to-main" \
+            --reviewer ${{ github.actor }}
+
+      - name: Comment on existing PR
+        if: steps.check-pr.outputs.pr_exists != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=$(gh pr list --base main --head dev --state open --json number --jq '.[0].number')
+          gh pr comment $PR_NUMBER --body "🔄 New commits pushed to dev branch at $(date +'%Y-%m-%d %H:%M UTC')"
