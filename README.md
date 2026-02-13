@@ -19,12 +19,14 @@ make pgadmin     # pgAdmin at http://localhost:5050
 ## Architecture
 
 ### Services
+
 - **API Service**: Configuration upload and management (gRPC)
 - **Distribution Service**: Push configurations to clients (gRPC streaming)
 - **Validation Service**: Configuration validation and schema checking
 - **Client SDK**: C++ library for services to receive configurations
 
 ### Infrastructure
+
 - **PostgreSQL**: Metadata and configuration storage
 - **Redis**: Caching and state management
 - **Kafka**: Event streaming and audit logging
@@ -68,31 +70,28 @@ make kafka-topics    # List topics
 | PostgreSQL | `localhost:5432` | user: `configuser` / pass: `configpass` |
 | Redis | `localhost:6379` | - |
 | Kafka | `localhost:9093` | - |
-| Kafka UI | http://localhost:8080 | - |
-| Grafana | http://localhost:3000 | admin / admin |
-| Prometheus | http://localhost:9090 | - |
-| pgAdmin | http://localhost:5050 | admin@example.com / admin |
+| Kafka UI | <http://localhost:8080> | - |
+| Grafana | <http://localhost:3000> | admin / admin |
+| Prometheus | <http://localhost:9090> | - |
+| pgAdmin | <http://localhost:5050> | `admin@config.local` / admin |
 
 Note: If you use the pgAdmin container, register the Postgres server with host `postgres` (not `localhost`).
 
-## Development
+## Development Setup
 
 See individual service READMEs:
+
 - [API Service](src/api-service/README.md)
 - [Distribution Service](src/distribution-service/README.md)
 - [Client SDK](src/client-sdk/README.md)
 
 ## License
-
-```
+```text
 MIT
 ```
 
 ## Directory Structure
-
-Now you should have:
-
-```
+```text
 dynamic-config-service/
 ├── docker-compose.yml          # Docker Compose configuration
 ├── .env                        # Environment variables
@@ -110,5 +109,4 @@ dynamic-config-service/
 │       └── validation-service.Dockerfile
 └── prometheus/
     └── prometheus.yml         # Prometheus configuration
-
-``` 
+```

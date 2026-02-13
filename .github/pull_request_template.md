@@ -1,4 +1,4 @@
-## Description
+# Description
 
 <!-- Provide a brief description of your changes -->
 
@@ -14,9 +14,9 @@
 
 <!-- List the main changes in bullet points -->
 
-- 
-- 
-- 
+-
+-
+-
 
 ## Testing
 
