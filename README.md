@@ -3,6 +3,7 @@
 A distributed configuration management system built with C++, gRPC, Kafka, and modern observability tools.
 
 ## Quick Start
+
 ```bash
 # 1. Complete setup (creates directories and starts all infrastructure)
 make dev
@@ -25,7 +26,7 @@ make pgadmin     # pgAdmin at http://localhost:5050
 - **Validation Service**: Configuration validation and schema checking
 - **Client SDK**: C++ library for services to receive configurations
 
-### Infrastructure
+### Infrastructure Components
 
 - **PostgreSQL**: Metadata and configuration storage
 - **Redis**: Caching and state management
@@ -37,6 +38,7 @@ make pgadmin     # pgAdmin at http://localhost:5050
 ## Makefile Commands
 
 ### Infrastructure
+
 ```bash
 make dev             # Complete dev setup
 make setup           # Alias for make dev
@@ -48,6 +50,7 @@ make verify          # Verify health
 ```
 
 ### Development
+
 ```bash
 make proto           # Generate proto code
 make services        # Build all services
@@ -57,6 +60,7 @@ make clean           # Clean build artifacts
 ```
 
 ### Database & Tools
+
 ```bash
 make db-shell        # PostgreSQL shell
 make redis-shell     # Redis CLI
@@ -86,11 +90,13 @@ See individual service READMEs:
 - [Client SDK](src/client-sdk/README.md)
 
 ## License
+
 ```text
 MIT
 ```
 
 ## Directory Structure
+
 ```text
 dynamic-config-service/
 ├── docker-compose.yml          # Docker Compose configuration
