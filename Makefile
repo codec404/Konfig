@@ -281,8 +281,6 @@ LIBS := -lprotobuf -lgrpc++ -lgrpc++_reflection -lpqxx -lpq -lhiredis -lrdkafka+
 PROTOC := protoc
 GRPC_CPP_PLUGIN_PATH ?= $(shell which grpc_cpp_plugin)
 
-PROTO_INCLUDES := -I. -I$(PROTO_DIR)
-
 # Proto files
 PROTO_FILES := $(wildcard $(PROTO_DIR)/*.proto)
 PROTO_SRCS := $(patsubst $(PROTO_DIR)/%.proto,$(BUILD_DIR)/%.pb.cc,$(PROTO_FILES))
@@ -301,12 +299,12 @@ proto: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)
 
 $(BUILD_DIR)/%.pb.cc $(BUILD_DIR)/%.pb.h: $(PROTO_DIR)/%.proto | $(BUILD_DIR)
 	@echo "$(YELLOW)Generating protobuf for $<...$(NC)"
-	@$(PROTOC) $(PROTO_INCLUDES) --cpp_out=$(BUILD_DIR) $<
+	@cd $(PROTO_DIR) && $(PROTOC) --proto_path=. --cpp_out=../$(BUILD_DIR) $(notdir $<)
 
 $(BUILD_DIR)/%.grpc.pb.cc $(BUILD_DIR)/%.grpc.pb.h: $(PROTO_DIR)/%.proto | $(BUILD_DIR)
 	@echo "$(YELLOW)Generating gRPC for $<...$(NC)"
-	@$(PROTOC) $(PROTO_INCLUDES) --grpc_out=$(BUILD_DIR) \
-		--plugin=protoc-gen-grpc=$(GRPC_CPP_PLUGIN_PATH) $<
+	@cd $(PROTO_DIR) && $(PROTOC) --proto_path=. --grpc_out=../$(BUILD_DIR) \
+		--plugin=protoc-gen-grpc=$(GRPC_CPP_PLUGIN_PATH) $(notdir $<)
 
 $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR):
 	@mkdir -p $@

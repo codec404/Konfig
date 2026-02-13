@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package configservice;
 
-import "proto/config.proto";
+import "config.proto";
 
 option go_package = "github.com/codec404/Konfig/proto";
 
