@@ -44,3 +44,14 @@ data/
 # Test coverage
 coverage/
 *.out
+
+# Pre-commit
+.pre-commit-config.yaml
+
+# Linters
+.markdownlint.json
+.clang-format
+.yamllint.yml
+
+# GitHub
+.github/
