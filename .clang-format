@@ -1,8 +1,73 @@
+---
 BasedOnStyle: Google
+Language: Cpp
+Standard: c++17
+
+# Indentation
 IndentWidth: 4
+TabWidth: 4
+UseTab: Never
 ColumnLimit: 100
-AllowShortFunctionsOnASingleLine: Empty
+
+# Braces
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
-BreakBeforeBraces: Attach
+
+# Spacing
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpaceInEmptyParentheses: false
+
+# Alignment
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignOperands: true
+AlignTrailingComments: true
+
+# Pointers and references
+DerivePointerAlignment: false
 PointerAlignment: Left
+
+# Namespaces
+NamespaceIndentation: None
+CompactNamespaces: false
+
+# Comments
+ReflowComments: true
+SpacesBeforeTrailingComments: 2
+
+# Line breaks
+AlwaysBreakAfterReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+
+# Includes
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex:           '^"config'
+    Priority:        1
+  - Regex:           '^<grpc'
+    Priority:        2
+  - Regex:           '^<google'
+    Priority:        3
+  - Regex:           '^<'
+    Priority:        4
+  - Regex:           '.*'
+    Priority:        5
+
+# Other
+AllowAllParametersOfDeclarationOnNextLine: true
+BinPackArguments: true
+BinPackParameters: true
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+Cpp11BracedListStyle: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+...
