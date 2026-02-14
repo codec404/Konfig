@@ -1,0 +1,39 @@
+mappings:
+  # Config client metrics
+  - match: "config.client.*.count"
+    name: "config_client_${1}_total"
+    labels: {}
+
+  - match: "config.client.*.duration"
+    name: "config_client_${1}_milliseconds"
+    labels: {}
+
+  - match: "config.client.connected"
+    name: "config_client_connected"
+    match_metric_type: gauge
+
+  - match: "config.client.config.version"
+    name: "config_client_config_version"
+    match_metric_type: gauge
+
+  - match: "config.client.config.size.bytes"
+    name: "config_client_config_size_bytes"
+    match_metric_type: gauge
+
+  # Test metrics
+  - match: "test.*"
+    name: "test_${1}"
+    labels: {}
+
+  # Generic patterns
+  - match: "*.count"
+    name: "${1}_total"
+    match_metric_type: counter
+
+  - match: "*.duration"
+    name: "${1}_milliseconds"
+    match_metric_type: timer
+
+  - match: "*.gauge"
+    name: "${1}"
+    match_metric_type: gauge
