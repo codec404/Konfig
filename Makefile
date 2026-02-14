@@ -3,7 +3,7 @@
 .PHONY: help setup infra-up infra-down infra-restart infra-logs infra-ps \
         verify cleanup proto services sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
-		format format-check \
+    		format format-check \
         example test-statsd \
         proto-native sdk-native example-native all-native \
         dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-clean dev-test-statsd
