@@ -77,7 +77,7 @@ make kafka-topics    # List topics
 | Kafka UI | <http://localhost:8080> | - |
 | Grafana | <http://localhost:3000> | admin / admin |
 | Prometheus | <http://localhost:9090> | - |
-| pgAdmin | <http://localhost:5050> | `admin@config.local` / admin |
+| pgAdmin | <http://localhost:5050> | `admin@example.com` / admin |
 
 Note: If you use the pgAdmin container, register the Postgres server with host `postgres` (not `localhost`).
 

@@ -1,4 +1,23 @@
 services:
+# Development container for building C++ code
+  dev-container:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: config-dev
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    networks:
+      - config-network
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+      - statsd-exporter
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
   postgres:
     image: postgres:15-alpine
     container_name: config-postgres
@@ -112,6 +131,29 @@ services:
       - '--web.console.templates=/etc/prometheus/consoles'
     networks:
       - config-network
+  
+  # StatsD Exporter - converts StatsD metrics to Prometheus format
+  statsd-exporter:
+    image: prom/statsd-exporter:latest
+    container_name: config-statsd-exporter
+    ports:
+      - "9102:9102"          # Prometheus metrics endpoint
+      - "9125:9125/udp"      # StatsD UDP (main)
+      - "9125:9125/tcp"      # StatsD TCP
+    volumes:
+      - ./prometheus/statsd-mapping.yml:/tmp/statsd-mapping.yml
+    command:
+      - '--statsd.mapping-config=/tmp/statsd-mapping.yml'
+      - '--statsd.listen-udp=:9125'
+      - '--statsd.listen-tcp=:9125'
+      - '--web.listen-address=:9102'
+    networks:
+      - config-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9102/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   grafana:
     image: grafana/grafana:latest
@@ -135,7 +177,7 @@ services:
     image: dpage/pgadmin4:latest
     container_name: config-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@config.local}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@example.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
       PGADMIN_CONFIG_SERVER_MODE: 'False'
     ports:

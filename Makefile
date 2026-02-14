@@ -3,7 +3,10 @@
 .PHONY: help setup infra-up infra-down infra-restart infra-logs infra-ps \
         verify cleanup proto services sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
-		format format-check
+    	format format-check \
+        example test-statsd \
+        proto-native sdk-native example-native all-native \
+        dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-clean dev-test-statsd
 
 # Colors
 RED := \033[0;31m
@@ -35,11 +38,24 @@ help:
 	@echo "  make verify          - Verify all services are healthy"
 	@echo "  make cleanup         - Complete cleanup (stop + remove volumes)"
 	@echo ""
-	@echo "$(GREEN)Development:$(NC)"
+	@echo "$(GREEN)Development Container (Recommended):$(NC)"
+	@echo "  make dev-up          - Start development container"
+	@echo "  make dev-shell       - Enter development container shell"
+	@echo "  make dev-build       - Build everything in dev container"
+	@echo "  make dev-proto       - Generate proto files in dev container"
+	@echo "  make dev-sdk         - Build SDK in dev container"
+	@echo "  make dev-example     - Build example in dev container"
+	@echo "  make dev-test-statsd - Test StatsD in dev container"
+	@echo "  make dev-clean       - Clean build artifacts in dev container"
+	@echo "  make dev-down        - Stop development container"
+	@echo ""
+	@echo "$(GREEN)Local Development (Mac/Linux):$(NC)"
 	@echo "  make proto           - Generate protobuf and gRPC code"
 	@echo "  make services        - Build all C++ services"
 	@echo "  make sdk             - Build client SDK"
 	@echo "  make all             - Build everything"
+	@echo "  make example         - Build example client"
+	@echo "  make test-statsd     - Build and run StatsD test"
 	@echo "  make test            - Run tests"
 	@echo "  make clean           - Remove build artifacts"
 	@echo "  make rebuild         - Clean and rebuild"
@@ -63,8 +79,10 @@ create-dirs:
 	@mkdir -p src/{common,client-sdk,api-service,distribution-service,validation-service}
 	@mkdir -p include/configclient
 	@mkdir -p tests
+	@mkdir -p examples
 	@mkdir -p build bin lib
 	@mkdir -p cmd/configctl
+	@mkdir -p scripts
 	@echo "$(GREEN)✓ Directories created$(NC)"
 
 dev: setup
@@ -104,7 +122,7 @@ setup: create-dirs
 
 infra-up:
 	@echo "$(YELLOW)Starting infrastructure services...$(NC)"
-	@$(COMPOSE) up -d
+	@$(COMPOSE) up -d postgres redis zookeeper kafka prometheus grafana pgadmin kafka-ui statsd-exporter
 	@echo "$(GREEN)✓ Infrastructure services started$(NC)"
 
 infra-down:
@@ -237,16 +255,19 @@ verify:
 	@echo "  Kafka UI:    $(BLUE)http://localhost:8080$(NC)"
 	@echo "  Grafana:     $(BLUE)http://localhost:3000$(NC) (admin/admin)"
 	@echo "  Prometheus:  $(BLUE)http://localhost:9090$(NC)"
-	@echo "  pgAdmin:     $(BLUE)http://localhost:5050$(NC) (admin@config.local/admin)"
+	@echo "  pgAdmin:     $(BLUE)http://localhost:5050$(NC) (admin@example.com/admin)"
+	@echo "  StatsD:      $(BLUE)http://localhost:9102/metrics$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Connection Info:$(NC)"
 	@echo "  PostgreSQL:  localhost:5432 (configuser/configpass/configservice)"
 	@echo "  Redis:       localhost:6379"
 	@echo "  Kafka:       localhost:9093"
+	@echo "  StatsD:      localhost:9125 (UDP)"
 	@echo ""
 	@echo "$(YELLOW)Quick Commands:$(NC)"
 	@echo "  Database shell:  make db-shell"
 	@echo "  Redis shell:     make redis-shell"
+	@echo "  Test StatsD:     make test-statsd"
 	@echo "  View logs:       make infra-logs"
 	@echo "  Stop services:   make infra-down"
 	@echo ""
@@ -281,12 +302,82 @@ pgadmin:
 		echo "  Open $(BLUE)http://localhost:5050$(NC) in your browser"
 
 #==============================================================================
+# DEVELOPMENT CONTAINER
+#==============================================================================
+
+# Start development container
+dev-up:
+	@echo "$(YELLOW)Starting development container...$(NC)"
+	@$(COMPOSE) up -d dev-container
+	@echo "$(GREEN)✓ Development container is running$(NC)"
+	@echo "$(YELLOW)Use 'make dev-shell' to enter the container$(NC)"
+
+# Stop development container
+dev-down:
+	@echo "$(YELLOW)Stopping development container...$(NC)"
+	@$(COMPOSE) stop dev-container
+	@echo "$(GREEN)✓ Development container stopped$(NC)"
+
+# Enter development container shell
+dev-shell:
+	@echo "$(YELLOW)Entering development container...$(NC)"
+	@$(COMPOSE) exec dev-container /bin/bash
+
+# Build everything in dev container
+dev-build:
+	@echo "$(YELLOW)Building in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make all-native
+	@echo "$(GREEN)✓ Build complete$(NC)"
+
+# Generate proto files in dev container
+dev-proto:
+	@echo "$(YELLOW)Generating proto files in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make proto-native
+	@echo "$(GREEN)✓ Proto files generated$(NC)"
+
+# Build SDK in dev container
+dev-sdk:
+	@echo "$(YELLOW)Building SDK in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make sdk-native
+	@echo "$(GREEN)✓ SDK built$(NC)"
+
+# Build example in dev container
+dev-example:
+	@echo "$(YELLOW)Building example in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make example-native
+	@echo "$(GREEN)✓ Example built$(NC)"
+
+# Clean in dev container
+dev-clean:
+	@echo "$(YELLOW)Cleaning in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make clean
+	@echo "$(GREEN)✓ Cleaned$(NC)"
+
+# Test StatsD in dev container
+dev-test-statsd:
+	@echo "$(YELLOW)Testing StatsD in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make test-statsd
+
+#==============================================================================
 # BUILD CONFIGURATION
 #==============================================================================
 
-CXX := g++
-CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -g
-LDFLAGS := -pthread
+# Auto-detect platform
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+    # macOS
+    CXX := clang++
+    INCLUDES_BASE := -I/opt/homebrew/include -I/usr/local/include
+    LDFLAGS_BASE := -L/opt/homebrew/lib -L/usr/local/lib
+else
+    # Linux (Docker)
+    CXX := g++
+    INCLUDES_BASE := -I/usr/local/include
+    LDFLAGS_BASE := -L/usr/local/lib
+endif
+
+CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -g -Wno-deprecated-declarations
+LDFLAGS := -pthread $(LDFLAGS_BASE)
 
 BUILD_DIR := build
 BIN_DIR := bin
@@ -295,9 +386,20 @@ INCLUDE_DIR := include
 SRC_DIR := src
 PROTO_DIR := proto
 
-INCLUDES := -I$(INCLUDE_DIR) -I$(BUILD_DIR) -I/usr/local/include
-LIBS := -lprotobuf -lgrpc++ -lgrpc++_reflection -lpqxx -lpq -lhiredis -lrdkafka++ \
-        -lfmt -lspdlog -lpthread -lyaml-cpp
+# Use pkg-config to get correct paths
+PROTO_CFLAGS := $(shell pkg-config --cflags protobuf grpc++ 2>/dev/null || echo "")
+PROTO_LIBS := $(shell pkg-config --libs protobuf grpc++ 2>/dev/null || echo "-lprotobuf -lgrpc++")
+
+INCLUDES := -I$(INCLUDE_DIR) -I$(BUILD_DIR) $(PROTO_CFLAGS) $(INCLUDES_BASE)
+
+# Minimal libs for SDK (only protobuf and grpc)
+SDK_LIBS := $(PROTO_LIBS) -lgrpc++_reflection
+
+# Full libs for services (will use later)
+SERVICE_LIBS := $(SDK_LIBS) -lpqxx -lpq -lhiredis -lrdkafka++ \
+                -lfmt -lspdlog -lyaml-cpp
+
+LIBS := $(SERVICE_LIBS)
 
 PROTOC := protoc
 GRPC_CPP_PLUGIN_PATH ?= $(shell which grpc_cpp_plugin)
@@ -309,6 +411,24 @@ PROTO_HDRS := $(patsubst $(PROTO_DIR)/%.proto,$(BUILD_DIR)/%.pb.h,$(PROTO_FILES)
 GRPC_SRCS := $(patsubst $(PROTO_DIR)/%.proto,$(BUILD_DIR)/%.grpc.pb.cc,$(PROTO_FILES))
 GRPC_HDRS := $(patsubst $(PROTO_DIR)/%.proto,$(BUILD_DIR)/%.grpc.pb.h,$(PROTO_FILES))
 
+# Common source files (includes StatsD)
+COMMON_SRCS := $(wildcard $(SRC_DIR)/common/*.cpp)
+COMMON_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(COMMON_SRCS))
+
+# SDK source files
+SDK_SRCS := $(wildcard $(SRC_DIR)/client-sdk/*.cpp)
+SDK_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(SDK_SRCS))
+
+# Proto object files
+PROTO_OBJS := $(PROTO_SRCS:.cc=.o) $(GRPC_SRCS:.cc=.o)
+
+# SDK library targets
+SDK_SHARED := $(LIB_DIR)/libconfigclient.so
+SDK_STATIC := $(LIB_DIR)/libconfigclient.a
+
+# StatsD standalone object (for testing without full SDK)
+STATSD_OBJ := $(BUILD_DIR)/common/statsd_client.o
+
 #==============================================================================
 # BUILD TARGETS
 #==============================================================================
@@ -318,25 +438,82 @@ all: proto services sdk
 proto: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)
 	@echo "$(GREEN)✓ Proto files generated$(NC)"
 
+# Generate protobuf files
 $(BUILD_DIR)/%.pb.cc $(BUILD_DIR)/%.pb.h: $(PROTO_DIR)/%.proto | $(BUILD_DIR)
 	@echo "$(YELLOW)Generating protobuf for $<...$(NC)"
 	@cd $(PROTO_DIR) && $(PROTOC) --proto_path=. --cpp_out=../$(BUILD_DIR) $(notdir $<)
 
+# Generate gRPC files
 $(BUILD_DIR)/%.grpc.pb.cc $(BUILD_DIR)/%.grpc.pb.h: $(PROTO_DIR)/%.proto | $(BUILD_DIR)
 	@echo "$(YELLOW)Generating gRPC for $<...$(NC)"
 	@cd $(PROTO_DIR) && $(PROTOC) --proto_path=. --grpc_out=../$(BUILD_DIR) \
 		--plugin=protoc-gen-grpc=$(GRPC_CPP_PLUGIN_PATH) $(notdir $<)
 
+# Create directories
 $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR):
 	@mkdir -p $@
 
+$(BUILD_DIR)/common $(BUILD_DIR)/client-sdk:
+	@mkdir -p $@
+
+# Compile common source files (StatsD, utilities)
+$(BUILD_DIR)/common/%.o: $(SRC_DIR)/common/%.cpp | $(BUILD_DIR)/common
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+# Compile SDK source files
+$(BUILD_DIR)/client-sdk/%.o: $(SRC_DIR)/client-sdk/%.cpp | $(BUILD_DIR)/client-sdk
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+# Compile proto objects
+$(BUILD_DIR)/%.pb.o: $(BUILD_DIR)/%.pb.cc
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+$(BUILD_DIR)/%.grpc.pb.o: $(BUILD_DIR)/%.grpc.pb.cc
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -fPIC -c $< -o $@
+
+# Build shared SDK library (use minimal libs)
+$(SDK_SHARED): $(SDK_OBJS) $(COMMON_OBJS) $(PROTO_OBJS) | $(LIB_DIR)
+	@echo "$(YELLOW)Building shared SDK library...$(NC)"
+	@$(CXX) -shared $(LDFLAGS) $^ $(SDK_LIBS) -o $@
+	@echo "$(GREEN)✓ Built $(SDK_SHARED)$(NC)"
+
+# Build static SDK library (no linking needed for static)
+$(SDK_STATIC): $(SDK_OBJS) $(COMMON_OBJS) $(PROTO_OBJS) | $(LIB_DIR)
+	@echo "$(YELLOW)Building static SDK library...$(NC)"
+	@ar rcs $@ $^
+	@echo "$(GREEN)✓ Built $(SDK_STATIC)$(NC)"
+
+# SDK target (builds both shared and static)
+sdk: proto $(SDK_SHARED) $(SDK_STATIC)
+	@echo "$(GREEN)✓ Client SDK built successfully$(NC)"
+
+# Services placeholder
 services: | $(BIN_DIR)
 	@echo "$(YELLOW)Building services...$(NC)"
 	@echo "$(BLUE)  Note: Service implementation pending$(NC)"
 
-sdk: | $(LIB_DIR)
-	@echo "$(YELLOW)Building SDK...$(NC)"
-	@echo "$(BLUE)  Note: SDK implementation pending$(NC)"
+# Examples and tests
+$(BIN_DIR)/statsd_test: examples/statsd_test.cpp $(STATSD_OBJ) | $(BIN_DIR)
+	@echo "$(YELLOW)Building StatsD test (standalone)...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
+	@echo "$(GREEN)✓ Built $@$(NC)"
+
+$(BIN_DIR)/simple_client: examples/simple_client.cpp $(SDK_STATIC) | $(BIN_DIR)
+	@echo "$(YELLOW)Building example client...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) $< $(SDK_STATIC) $(SDK_LIBS) -o $@
+	@echo "$(GREEN)✓ Built $@$(NC)"
+
+# Convenience targets
+example: $(BIN_DIR)/simple_client
+
+test-statsd: $(BIN_DIR)/statsd_test
+	@echo "$(YELLOW)Running StatsD test...$(NC)"
+	@echo ""
+	@./$(BIN_DIR)/statsd_test
 
 test:
 	@echo "$(YELLOW)Running tests...$(NC)"
@@ -348,6 +525,22 @@ clean:
 	@echo "$(GREEN)✓ Build artifacts cleaned$(NC)"
 
 rebuild: clean all
+
+#==============================================================================
+# NATIVE BUILD TARGETS (used by dev container)
+#==============================================================================
+
+proto-native: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)
+	@echo "$(GREEN)✓ Proto files generated$(NC)"
+
+sdk-native: proto-native $(SDK_SHARED) $(SDK_STATIC)
+	@echo "$(GREEN)✓ Client SDK built$(NC)"
+
+example-native: $(BIN_DIR)/simple_client
+	@echo "$(GREEN)✓ Example client built$(NC)"
+
+all-native: proto-native sdk-native
+	@echo "$(GREEN)✓ All components built$(NC)"
 
 #==============================================================================
 # CLEANUP

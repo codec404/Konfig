@@ -3,7 +3,7 @@
 ## pgAdmin
 
 - URL: <http://localhost:5050>
-- Login: `admin@config.local` / admin
+- Login: `admin@example.com` / admin
 
 ### Add PostgreSQL Server in pgAdmin
 

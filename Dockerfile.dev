@@ -1,0 +1,63 @@
+FROM ubuntu:22.04
+
+# Prevent interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    pkg-config \
+    autoconf \
+    automake \
+    libtool \
+    curl \
+    unzip \
+    wget \
+    vim \
+    gdb \
+    valgrind \
+    # gRPC and protobuf from Ubuntu repos
+    libgrpc++-dev \
+    libprotobuf-dev \
+    protobuf-compiler \
+    protobuf-compiler-grpc \
+    # PostgreSQL client
+    postgresql-client \
+    # Redis client
+    redis-tools \
+    # Network tools
+    netcat \
+    iputils-ping \
+    net-tools \
+    dnsutils \
+    # Other dependencies
+    libpqxx-dev \
+    libhiredis-dev \
+    librdkafka-dev \
+    libfmt-dev \
+    libspdlog-dev \
+    libyaml-cpp-dev \
+    # Code formatting
+    clang-format \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r devuser && useradd -r -g devuser -m -s /bin/bash devuser
+
+# Set working directory
+WORKDIR /workspace
+
+# Change ownership of workspace to devuser
+RUN chown -R devuser:devuser /workspace
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD ps aux || exit 1
+
+# Switch to non-root user
+USER devuser
+
+# Default command
+CMD ["/bin/bash"]
