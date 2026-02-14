@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfmt-dev \
     libspdlog-dev \
     libyaml-cpp-dev \
+    # Code formatting
+    clang-format \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
