@@ -3,6 +3,8 @@
 #include <cstring>
 #include <iostream>
 #include <netdb.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace statsdclient {
 
@@ -34,9 +36,13 @@ StatsDClient::StatsDClient(const std::string& host, int port, const std::string&
     memset(&server_addr_, 0, sizeof(server_addr_));
     server_addr_.sin_family = AF_INET;
     server_addr_.sin_port = htons(port_);
-    server_addr_.sin_addr = ((struct sockaddr_in*)result->ai_addr)->sin_addr;
+    server_addr_.sin_addr = reinterpret_cast<struct sockaddr_in*>(result->ai_addr)->sin_addr;
 
     freeaddrinfo(result);
+
+    if (!prefix_.empty() && prefix_.back() != '.') {
+        prefix_ += '.';
+    }
 }
 
 StatsDClient::~StatsDClient() {
@@ -104,7 +110,7 @@ void StatsDClient::send(const std::string& metric, int value, const std::string&
 
     // Send via UDP (fire and forget)
     ssize_t sent = sendto(sock_, message.c_str(), message.length(), 0,
-                          (struct sockaddr*)&server_addr_, sizeof(server_addr_));
+                          reinterpret_cast<struct sockaddr*>(&server_addr_), sizeof(server_addr_));
 
     if (sent < 0) {
         // Don't log every error to avoid spam, but could add debug logging
@@ -132,7 +138,7 @@ StatsDTimer::StatsDTimer(StatsDClient& client, const std::string& metric)
 StatsDTimer::~StatsDTimer() {
     auto end = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start_);
-    client_.timing(metric_, duration.count());
+    client_.timing(metric_, static_cast<int>(duration.count()));
 }
 
 }  // namespace statsdclient
