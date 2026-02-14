@@ -22,7 +22,7 @@ jobs:
       - name: Check C++ formatting
         run: |
           if find src include -name '*.cpp' -o -name '*.h' 2>/dev/null | grep -q .; then
-            find src include -name '*.cpp' -o -name '*.h' | xargs clang-format -n -Werror
+            find src include -name '*.cpp' -o -name '*.h' | xargs clang-format -n -Werror --style=Google
           else
             echo "No C++ source files yet, skipping format check"
           fi
