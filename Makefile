@@ -234,7 +234,7 @@ verify:
 	@echo "  Kafka UI:    $(BLUE)http://localhost:8080$(NC)"
 	@echo "  Grafana:     $(BLUE)http://localhost:3000$(NC) (admin/admin)"
 	@echo "  Prometheus:  $(BLUE)http://localhost:9090$(NC)"
-	@echo "  pgAdmin:     $(BLUE)http://localhost:5050$(NC) (admin@config.local/admin)"
+	@echo "  pgAdmin:     $(BLUE)http://localhost:5050$(NC) (admin@example.com/admin)"
 	@echo "  StatsD:      $(BLUE)http://localhost:9102/metrics$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Connection Info:$(NC)"
