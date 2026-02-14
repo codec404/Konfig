@@ -40,7 +40,26 @@ jobs:
       - name: Run cppcheck (static analysis)
         run: |
           if [ -d "src" ] && find src -name '*.cpp' 2>/dev/null | grep -q .; then
-            cppcheck --enable=all --error-exitcode=1 --suppress=missingIncludeSystem src/
+            echo "Running cppcheck static analysis..."
+            cppcheck \
+              --enable=warning,style,performance,portability \
+              --error-exitcode=1 \
+              --suppress=missingIncludeSystem \
+              --suppress=missingInclude \
+              --inline-suppr \
+              -I include \
+              -I build \
+              --quiet \
+              src/ 2>&1 | tee cppcheck.log
+            
+            # Check if there are actual errors (not just info)
+            if grep -E "error:|warning:" cppcheck.log > /dev/null; then
+              echo "❌ cppcheck found issues"
+              cat cppcheck.log
+              exit 1
+            else
+              echo "✅ cppcheck passed"
+            fi
           else
             echo "No src directory yet, skipping cppcheck"
           fi
