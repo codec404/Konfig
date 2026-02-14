@@ -47,3 +47,7 @@ coverage/
 
 # md files
 BRANCH_PROTECTION_SETUP.md
+
+# Clang-format
+.clang-format~
+*.formatted

@@ -3,6 +3,7 @@
 .PHONY: help setup infra-up infra-down infra-restart infra-logs infra-ps \
         verify cleanup proto services sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
+		format format-check \
         example test-statsd \
         proto-native sdk-native example-native all-native \
         dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-clean dev-test-statsd
@@ -85,6 +86,26 @@ create-dirs:
 	@echo "$(GREEN)✓ Directories created$(NC)"
 
 dev: setup
+
+#==============================================================================
+# CODE FORMATTING
+#==============================================================================
+
+# Format all source files
+format:
+	@echo "$(YELLOW)Formatting code...$(NC)"
+	@find src include examples -type f \( -name '*.cpp' -o -name '*.h' \) -exec clang-format -i {} +
+	@echo "$(GREEN)✓ Code formatted$(NC)"
+
+# Check formatting without modifying files
+format-check:
+	@echo "$(YELLOW)Checking code formatting...$(NC)"
+	@if find src include examples -type f \( -name '*.cpp' -o -name '*.h' \) -exec clang-format --dry-run -Werror {} + 2>&1 | grep -q "error:"; then \
+		echo "$(RED)✗ Code formatting issues found. Run 'make format' to fix.$(NC)"; \
+		exit 1; \
+	else \
+		echo "$(GREEN)✓ Code formatting OK$(NC)"; \
+	fi
 
 #==============================================================================
 # INFRASTRUCTURE
