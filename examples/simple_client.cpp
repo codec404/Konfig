@@ -1,9 +1,9 @@
-#include <iostream>
-#include <thread>
+#include "configclient/config_client.h"
+
 #include <chrono>
 #include <csignal>
-
-#include "configclient/config_client.h"
+#include <iostream>
+#include <thread>
 
 using namespace configservice;
 
@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
 
     std::string server_address = "localhost:8082";
     std::string service_name = "example-service";
-    
+
     if (argc > 1) {
         server_address = argv[1];
     }
@@ -43,8 +43,8 @@ int main(int argc, char** argv) {
         std::cout << "Version: " << config.version() << std::endl;
         std::cout << "Format: " << config.format() << std::endl;
         std::cout << "Content length: " << config.content().length() << " bytes" << std::endl;
-        std::cout << "Content preview: " 
-                  << config.content().substr(0, std::min(size_t(100), config.content().length())) 
+        std::cout << "Content preview: "
+                  << config.content().substr(0, std::min(size_t(100), config.content().length()))
                   << (config.content().length() > 100 ? "..." : "") << std::endl;
         std::cout << ">>>" << std::endl << std::endl;
     });

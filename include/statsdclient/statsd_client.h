@@ -1,37 +1,37 @@
 #pragma once
 
-#include <string>
-#include <sstream>
-#include <chrono>
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <unistd.h>
+#include <chrono>
 #include <cstring>
+#include <netinet/in.h>
 #include <random>
+#include <sstream>
+#include <string>
+#include <sys/socket.h>
+#include <unistd.h>
 
 namespace statsdclient {
 
 /**
  * @brief StatsD client for sending metrics
- * 
+ *
  * Supports counters, gauges, timings, histograms, and sets.
  * Uses UDP for fire-and-forget metric reporting.
- * 
+ *
  * Example usage:
  * @code
  *   StatsDClient statsd("localhost", 9125);
- *   
+ *
  *   // Counter
  *   statsd.increment("requests.count");
  *   statsd.count("errors.count", 5);
- *   
+ *
  *   // Gauge
  *   statsd.gauge("connections.active", 42);
- *   
+ *
  *   // Timing
  *   statsd.timing("request.duration", 125);
- *   
+ *
  *   // RAII Timer
  *   {
  *       StatsDTimer timer(statsd, "processing.time");
@@ -40,17 +40,16 @@ namespace statsdclient {
  * @endcode
  */
 class StatsDClient {
-public:
+   public:
     /**
      * @brief Construct a new StatsD Client
-     * 
+     *
      * @param host StatsD server hostname or IP (default: "localhost")
      * @param port StatsD server port (default: 9125)
      * @param prefix Optional prefix for all metrics (e.g., "myapp.")
      */
-    explicit StatsDClient(const std::string& host = "localhost", 
-                         int port = 9125,
-                         const std::string& prefix = "");
+    explicit StatsDClient(const std::string& host = "localhost", int port = 9125,
+                          const std::string& prefix = "");
 
     ~StatsDClient();
 
@@ -60,7 +59,7 @@ public:
 
     /**
      * @brief Increment a counter by 1
-     * 
+     *
      * @param metric Metric name
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
      */
@@ -68,7 +67,7 @@ public:
 
     /**
      * @brief Decrement a counter by 1
-     * 
+     *
      * @param metric Metric name
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
      */
@@ -76,7 +75,7 @@ public:
 
     /**
      * @brief Add arbitrary value to counter
-     * 
+     *
      * @param metric Metric name
      * @param value Value to add (can be negative)
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
@@ -85,7 +84,7 @@ public:
 
     /**
      * @brief Set a gauge value
-     * 
+     *
      * @param metric Metric name
      * @param value Gauge value
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
@@ -94,7 +93,7 @@ public:
 
     /**
      * @brief Record timing in milliseconds
-     * 
+     *
      * @param metric Metric name
      * @param milliseconds Duration in milliseconds
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
@@ -103,7 +102,7 @@ public:
 
     /**
      * @brief Record histogram value
-     * 
+     *
      * @param metric Metric name
      * @param value Histogram value
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
@@ -112,7 +111,7 @@ public:
 
     /**
      * @brief Count unique occurrences
-     * 
+     *
      * @param metric Metric name
      * @param value Unique value
      * @param sample_rate Sample rate (0.0 to 1.0, default 1.0)
@@ -121,7 +120,7 @@ public:
 
     /**
      * @brief Check if client is connected
-     * 
+     *
      * @return true if UDP socket is valid
      */
     bool isConnected() const { return sock_ >= 0; }
@@ -131,7 +130,7 @@ public:
      */
     const std::string& getPrefix() const { return prefix_; }
 
-private:
+   private:
     void send(const std::string& metric, int value, const std::string& type, float sample_rate);
     bool shouldSample(float sample_rate);
 
@@ -148,10 +147,10 @@ private:
 
 /**
  * @brief RAII timer for automatic timing measurements
- * 
+ *
  * Automatically sends timing metric when the timer object
  * goes out of scope.
- * 
+ *
  * Example:
  * @code
  *   void processRequest() {
@@ -161,10 +160,10 @@ private:
  * @endcode
  */
 class StatsDTimer {
-public:
+   public:
     /**
      * @brief Construct a new StatsD Timer
-     * 
+     *
      * @param client StatsD client to use
      * @param metric Metric name
      */
@@ -176,10 +175,10 @@ public:
     StatsDTimer(const StatsDTimer&) = delete;
     StatsDTimer& operator=(const StatsDTimer&) = delete;
 
-private:
+   private:
     StatsDClient& client_;
     std::string metric_;
     std::chrono::steady_clock::time_point start_;
 };
 
-} // namespace statsdclient
+}  // namespace statsdclient

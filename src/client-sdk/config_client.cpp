@@ -1,9 +1,10 @@
 #include "configclient/config_client.h"
+
 #include "configclient/config_client_impl.h"
 
 #include <iostream>
-#include <sstream>
 #include <random>
+#include <sstream>
 
 namespace configservice {
 
@@ -13,22 +14,18 @@ std::string GenerateInstanceId() {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<> dis(100000, 999999);
-    
+
     std::ostringstream oss;
     oss << "instance-" << dis(gen);
     return oss.str();
 }
-} // anonymous namespace
+}  // anonymous namespace
 
-ConfigClient::ConfigClient(const std::string& server_address,
-                           const std::string& service_name,
+ConfigClient::ConfigClient(const std::string& server_address, const std::string& service_name,
                            const std::string& instance_id)
-    : server_address_(server_address),
-      service_name_(service_name),
+    : server_address_(server_address), service_name_(service_name),
       instance_id_(instance_id.empty() ? GenerateInstanceId() : instance_id) {
-    
-    impl_ = std::make_unique<ConfigClientImpl>(
-        server_address_, service_name_, instance_id_);
+    impl_ = std::make_unique<ConfigClientImpl>(server_address_, service_name_, instance_id_);
 }
 
 ConfigClient::~ConfigClient() {
@@ -63,4 +60,4 @@ int64_t ConfigClient::GetCurrentVersion() const {
     return impl_->GetCurrentVersion();
 }
 
-} // namespace configservice
+}  // namespace configservice

@@ -1,8 +1,9 @@
-#include "statsdclient/statsd_client.h"
-#include <iostream>
-#include <thread>
 #include <chrono>
+#include <iostream>
 #include <random>
+#include <thread>
+
+#include "statsdclient/statsd_client.h"
 
 int main() {
     std::cout << "\nStatsD Client Test" << std::endl;
@@ -44,12 +45,12 @@ int main() {
 
     for (int i = 0; i < 10; ++i) {
         std::cout << "  Tick " << (i + 1) << "/10" << std::endl;
-        
+
         // Simulate requests
         statsd.increment("simulated_requests", 2);
         statsd.timing("simulated_response_time", response_time(gen));
         statsd.gauge("simulated_active_users", user_count(gen));
-        
+
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 

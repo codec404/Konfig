@@ -23,31 +23,30 @@ using ConnectionStatusCallback = std::function<void(bool connected)>;
 
 /**
  * @brief Client SDK for receiving configuration updates
- * 
+ *
  * Example:
  * @code
  *   ConfigClient client("localhost:8082", "my-service");
- *   
+ *
  *   client.OnConfigUpdate([](const ConfigData& config) {
  *       std::cout << "New config: " << config.version() << std::endl;
  *   });
- *   
+ *
  *   client.Start();
  *   // ... your app runs ...
  *   client.Stop();
  * @endcode
  */
 class ConfigClient {
-public:
+   public:
     /**
      * @brief Construct a new Config Client
-     * 
+     *
      * @param server_address Distribution service address (e.g., "localhost:8082")
      * @param service_name Name of this service
      * @param instance_id Unique instance identifier (auto-generated if empty)
      */
-    ConfigClient(const std::string& server_address,
-                 const std::string& service_name,
+    ConfigClient(const std::string& server_address, const std::string& service_name,
                  const std::string& instance_id = "");
 
     ~ConfigClient();
@@ -101,7 +100,7 @@ public:
      */
     const std::string& GetInstanceId() const { return instance_id_; }
 
-private:
+   private:
     std::string server_address_;
     std::string service_name_;
     std::string instance_id_;
@@ -109,4 +108,4 @@ private:
     std::unique_ptr<ConfigClientImpl> impl_;
 };
 
-} // namespace configservice
+}  // namespace configservice

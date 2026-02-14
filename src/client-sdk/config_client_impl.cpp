@@ -6,21 +6,14 @@
 namespace configservice {
 
 ConfigClientImpl::ConfigClientImpl(const std::string& server_address,
-                                   const std::string& service_name,
-                                   const std::string& instance_id)
-    : server_address_(server_address),
-      service_name_(service_name),
-      instance_id_(instance_id),
-      current_version_(0),
-      running_(false),
-      connected_(false) {
-    
+                                   const std::string& service_name, const std::string& instance_id)
+    : server_address_(server_address), service_name_(service_name), instance_id_(instance_id),
+      current_version_(0), running_(false), connected_(false) {
     // Create gRPC channel
-    channel_ = grpc::CreateChannel(server_address_, 
-                                   grpc::InsecureChannelCredentials());
+    channel_ = grpc::CreateChannel(server_address_, grpc::InsecureChannelCredentials());
     stub_ = DistributionService::NewStub(channel_);
-    
-    std::cout << "[ConfigClient] Created client for service: " << service_name_ 
+
+    std::cout << "[ConfigClient] Created client for service: " << service_name_
               << " (instance: " << instance_id_ << ")" << std::endl;
 }
 
@@ -101,9 +94,9 @@ void ConfigClientImpl::StreamLoop() {
         }
 
         if (running_) {
-            std::cout << "[ConfigClient] Reconnecting in " 
-                      << kReconnectDelaySeconds << " seconds..." << std::endl;
-            
+            std::cout << "[ConfigClient] Reconnecting in " << kReconnectDelaySeconds
+                      << " seconds..." << std::endl;
+
             std::unique_lock<std::mutex> lock(shutdown_mutex_);
             shutdown_cv_.wait_for(lock, std::chrono::seconds(kReconnectDelaySeconds));
         }
@@ -113,7 +106,7 @@ void ConfigClientImpl::StreamLoop() {
 void ConfigClientImpl::ConnectAndSubscribe() {
     // Create new context
     context_ = std::make_unique<grpc::ClientContext>();
-    
+
     // Create bidirectional stream
     stream_ = stub_->Subscribe(context_.get());
 
@@ -146,7 +139,7 @@ void ConfigClientImpl::ConnectAndSubscribe() {
 
     // Connection lost
     SetConnectionStatus(false);
-    
+
     grpc::Status status = stream_->Finish();
     if (!status.ok()) {
         std::cerr << "[ConfigClient] Stream ended: " << status.error_message() << std::endl;
@@ -159,9 +152,8 @@ void ConfigClientImpl::HandleConfigUpdate(const ConfigUpdate& update) {
     }
 
     const ConfigData& config = update.config();
-    
-    std::cout << "[ConfigClient] Received config update v" 
-              << config.version() << std::endl;
+
+    std::cout << "[ConfigClient] Received config update v" << config.version() << std::endl;
 
     // Update current config
     {
@@ -185,21 +177,20 @@ void ConfigClientImpl::HandleConfigUpdate(const ConfigUpdate& update) {
 
 void ConfigClientImpl::SetConnectionStatus(bool connected) {
     bool was_connected = connected_.exchange(connected);
-    
+
     if (was_connected != connected) {
-        std::cout << "[ConfigClient] Connection status: " 
+        std::cout << "[ConfigClient] Connection status: "
                   << (connected ? "CONNECTED" : "DISCONNECTED") << std::endl;
-        
+
         std::lock_guard<std::mutex> lock(callback_mutex_);
         if (connection_callback_) {
             try {
                 connection_callback_(connected);
             } catch (const std::exception& e) {
-                std::cerr << "[ConfigClient] Connection callback error: " 
-                          << e.what() << std::endl;
+                std::cerr << "[ConfigClient] Connection callback error: " << e.what() << std::endl;
             }
         }
     }
 }
 
-} // namespace configservice
+}  // namespace configservice

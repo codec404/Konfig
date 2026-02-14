@@ -1,6 +1,9 @@
 #pragma once
 
+#include "config_client.h"
+
 #include <grpcpp/grpcpp.h>
+
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -8,15 +11,13 @@
 #include <mutex>
 #include <thread>
 
-#include "config_client.h"
 #include "distribution.grpc.pb.h"
 
 namespace configservice {
 
 class ConfigClientImpl {
-public:
-    ConfigClientImpl(const std::string& server_address,
-                     const std::string& service_name,
+   public:
+    ConfigClientImpl(const std::string& server_address, const std::string& service_name,
                      const std::string& instance_id);
 
     ~ConfigClientImpl();
@@ -34,7 +35,7 @@ public:
     const std::string& GetServiceName() const { return service_name_; }
     const std::string& GetInstanceId() const { return instance_id_; }
 
-private:
+   private:
     void StreamLoop();
     void ConnectAndSubscribe();
     void HandleConfigUpdate(const ConfigUpdate& update);
@@ -71,4 +72,4 @@ private:
     static constexpr int kReconnectDelaySeconds = 5;
 };
 
-} // namespace configservice
+}  // namespace configservice
