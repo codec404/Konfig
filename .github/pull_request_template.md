@@ -2,6 +2,14 @@
 
 <!-- Provide a brief description of your changes -->
 
+## Target Branch
+
+<!-- ⚠️ IMPORTANT: PRs should target `dev` by default -->
+<!-- Only target `master` for hotfixes or auto-generated D2M PRs -->
+
+- [ ] **Targeting `dev`** ✅ (default for all feature branches)
+- [ ] Targeting `master` ⚠️ (hotfix or auto-generated D2M only)
+
 ## Type of Change
 
 - [ ] Bug fix (non-breaking change which fixes an issue)

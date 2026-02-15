@@ -47,6 +47,7 @@ coverage/
 
 # md files
 BRANCH_PROTECTION_SETUP.md
+GITHUB_SETUP.md
 
 # Clang-format
 .clang-format~

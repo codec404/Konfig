@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [dev, main, master]
+    branches: [dev, master]
   push:
-    branches: [dev, main, master]
+    branches: [dev, master]
 
 jobs:
   lint-and-format:

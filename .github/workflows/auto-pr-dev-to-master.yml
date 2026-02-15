@@ -1,4 +1,4 @@
-name: Auto PR Dev to Main
+name: Auto PR Dev to Master (D2M)
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   create-pr:
-    name: Create Dev → Main PR
+    name: Create Dev → Master PR
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -20,7 +20,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_EXISTS=$(gh pr list --base main --head dev --state open --json number --jq length)
+          PR_EXISTS=$(gh pr list --base master --head dev --state open --json number --jq length)
           echo "pr_exists=$PR_EXISTS" >> $GITHUB_OUTPUT
 
       - name: Get commits since last merge
@@ -29,39 +29,39 @@ jobs:
         run: |
           # Get the last commit message
           LAST_COMMIT=$(git log -1 --pretty=%B)
-          
-          # Get list of commits since last main merge
-          COMMITS=$(git log --oneline origin/main..origin/dev --pretty=format:"- %s (%an)" | head -20)
-          
+
+          # Get list of commits since last master merge
+          COMMITS=$(git log --oneline origin/master..origin/dev --pretty=format:"- %s (%an)" | head -20)
+
           # Create PR body
           cat > pr_body.md << 'PRBODY'
-          ## 🚀 Dev → Main Sync
-          
-          This PR contains changes from the `dev` branch ready to be merged into `main`.
-          
+          ## 🚀 Dev → Master Sync (D2M)
+
+          This PR contains changes from the `dev` branch ready to be merged into `master`.
+
           ### Recent Commits
-          
+
           PRBODY
-          
+
           echo "$COMMITS" >> pr_body.md
-          
+
           cat >> pr_body.md << 'PRBODY'
-          
+
           ### Checklist
-          
+
           - [ ] All CI checks passed
           - [ ] Code reviewed by at least one team member
           - [ ] Documentation updated (if needed)
           - [ ] No breaking changes (or properly documented)
-          
+
           ### Testing
-          
+
           - [ ] Tested locally
           - [ ] Integration tests pass
           - [ ] Docker containers start successfully
-          
+
           ---
-          
+
           **Auto-generated PR** • Merging this will deploy to production
           PRBODY
 
@@ -71,11 +71,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh pr create \
-            --title "🔄 Dev → Main: $(date +'%Y-%m-%d %H:%M')" \
+            --title "🔄 Dev → Master (D2M): $(date +'%Y-%m-%d %H:%M')" \
             --body-file pr_body.md \
-            --base main \
+            --base master \
             --head dev \
-            --label "auto-pr,dev-to-main" \
+            --label "auto-pr,dev-to-master,d2m" \
             --reviewer ${{ github.actor }}
 
       - name: Comment on existing PR
@@ -83,5 +83,5 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR_NUMBER=$(gh pr list --base main --head dev --state open --json number --jq '.[0].number')
+          PR_NUMBER=$(gh pr list --base master --head dev --state open --json number --jq '.[0].number')
           gh pr comment $PR_NUMBER --body "🔄 New commits pushed to dev branch at $(date +'%Y-%m-%d %H:%M UTC')"
