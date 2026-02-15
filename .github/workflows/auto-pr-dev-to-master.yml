@@ -23,15 +23,22 @@ jobs:
           PR_EXISTS=$(gh pr list --base master --head dev --state open --json number --jq length)
           echo "pr_exists=$PR_EXISTS" >> $GITHUB_OUTPUT
 
-      - name: Get commits since last merge
+      - name: Get new commits from this push
         id: get-commits
         if: steps.check-pr.outputs.pr_exists == '0'
         run: |
-          # Get the last commit message
-          LAST_COMMIT=$(git log -1 --pretty=%B)
+          # Get commits from the push event (new commits only)
+          if [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            # Normal push - show commits since previous dev state
+            NEW_COMMITS=$(git log --oneline ${{ github.event.before }}..${{ github.event.after }} --pretty=format:"- %s (%an)")
+          else
+            # First push or force push - show last 5 commits
+            NEW_COMMITS=$(git log --oneline -5 ${{ github.event.after }} --pretty=format:"- %s (%an)")
+          fi
 
-          # Get list of commits since last master merge
-          COMMITS=$(git log --oneline origin/master..origin/dev --pretty=format:"- %s (%an)" | head -20)
+          # Get all commits ready for master (for context)
+          ALL_COMMITS=$(git log --oneline origin/master..origin/dev --pretty=format:"- %s (%an)" | head -20)
+          COMMIT_COUNT=$(git rev-list --count origin/master..origin/dev)
 
           # Create PR body
           cat > pr_body.md << 'PRBODY'
@@ -39,11 +46,19 @@ jobs:
 
           This PR contains changes from the `dev` branch ready to be merged into `master`.
 
-          ### Recent Commits
+          ### New Commits (Just Added)
 
           PRBODY
 
-          echo "$COMMITS" >> pr_body.md
+          echo "$NEW_COMMITS" >> pr_body.md
+
+          cat >> pr_body.md << 'PRBODY'
+
+          ### All Commits Ready for Master
+
+          PRBODY
+
+          echo "$ALL_COMMITS" >> pr_body.md
 
           cat >> pr_body.md << 'PRBODY'
 
@@ -96,10 +111,29 @@ jobs:
             --head dev \
             --reviewer ${{ github.actor }}
 
+      - name: Get new commits for comment
+        id: get-new-commits
+        if: steps.check-pr.outputs.pr_exists != '0'
+        run: |
+          # Get commits from the push event
+          if [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            NEW_COMMITS=$(git log --oneline ${{ github.event.before }}..${{ github.event.after }} --pretty=format:"- %s (%an)")
+          else
+            NEW_COMMITS=$(git log --oneline -5 ${{ github.event.after }} --pretty=format:"- %s (%an)")
+          fi
+
+          # Save to file for comment
+          cat > comment.md << 'COMMENT'
+          🔄 **New commits pushed to dev** at $(date +'%Y-%m-%d %H:%M UTC')
+
+          COMMENT
+
+          echo "$NEW_COMMITS" >> comment.md
+
       - name: Comment on existing PR
         if: steps.check-pr.outputs.pr_exists != '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PR_NUMBER=$(gh pr list --base master --head dev --state open --json number --jq '.[0].number')
-          gh pr comment $PR_NUMBER --body "🔄 New commits pushed to dev branch at $(date +'%Y-%m-%d %H:%M UTC')"
+          gh pr comment $PR_NUMBER --body-file comment.md
