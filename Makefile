@@ -6,7 +6,8 @@
     	format format-check \
         example test-statsd \
         proto-native sdk-native example-native all-native \
-        dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-clean dev-test-statsd
+        dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-clean dev-test-statsd \
+		cli cli-build cli-install cli-clean
 
 # Colors
 RED := \033[0;31m
@@ -428,6 +429,29 @@ SDK_STATIC := $(LIB_DIR)/libconfigclient.a
 
 # StatsD standalone object (for testing without full SDK)
 STATSD_OBJ := $(BUILD_DIR)/common/statsd_client.o
+
+#==============================================================================
+# BUILD CLI
+#==============================================================================
+
+CLI_DIR := cmd/configctl
+CLI_BIN := $(BIN_DIR)/configctl
+
+cli: cli-build
+
+cli-build:
+	@echo "$(YELLOW)Building configctl CLI...$(NC)"
+	@cd $(CLI_DIR) && go build -o ../../$(CLI_BIN) .
+	@echo "$(GREEN)✓ Built $(CLI_BIN)$(NC)"
+
+cli-install:
+	@echo "$(YELLOW)Installing configctl...$(NC)"
+	@cd $(CLI_DIR) && go install
+	@echo "$(GREEN)✓ Installed configctl to $$GOPATH/bin$(NC)"
+
+cli-clean:
+	@rm -f $(CLI_BIN)
+	@cd $(CLI_DIR) && go clean
 
 #==============================================================================
 # BUILD TARGETS
