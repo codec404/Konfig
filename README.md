@@ -67,8 +67,6 @@ make redis-shell     # Redis CLI
 make kafka-topics    # List topics
 ```
 
-📚 For a complete command reference, see [COMMANDS.md](COMMANDS.md)
-
 ## Connection Info
 
 | Service | URL/Port | Credentials |
