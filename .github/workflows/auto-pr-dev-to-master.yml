@@ -65,17 +65,35 @@ jobs:
           **Auto-generated PR** • Merging this will deploy to production
           PRBODY
 
+      - name: Ensure labels exist
+        if: steps.check-pr.outputs.pr_exists == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Create labels if they don't exist (ignore errors if they already exist)
+          gh label create "auto-pr" --description "Auto-generated pull request" --color "0E8A16" || true
+          gh label create "dev-to-master" --description "PR from dev to master branch" --color "1D76DB" || true
+          gh label create "d2m" --description "Dev to Master sync" --color "5319E7" || true
+
       - name: Create Pull Request
         if: steps.check-pr.outputs.pr_exists == '0'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Create PR with labels
           gh pr create \
             --title "🔄 Dev → Master (D2M): $(date +'%Y-%m-%d %H:%M')" \
             --body-file pr_body.md \
             --base master \
             --head dev \
             --label "auto-pr,dev-to-master,d2m" \
+            --reviewer ${{ github.actor }} || \
+          # If labels fail, create PR without them
+          gh pr create \
+            --title "🔄 Dev → Master (D2M): $(date +'%Y-%m-%d %H:%M')" \
+            --body-file pr_body.md \
+            --base master \
+            --head dev \
             --reviewer ${{ github.actor }}
 
       - name: Comment on existing PR
