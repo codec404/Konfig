@@ -312,7 +312,7 @@ Build everything - proto files, SDK, and services.
 make all
 ```
 
-**Equivalent to:** `make proto sdk services`
+**Equivalent to:** `make proto distribution-service sdk`
 
 ---
 
@@ -346,17 +346,49 @@ make sdk
 
 ---
 
+### `make distribution-service`
+
+Build the Distribution Service (C++ gRPC service).
+
+```bash
+make distribution-service
+```
+
+**What it does:**
+
+- Compiles all distribution service source files
+- Links with protobuf, gRPC, PostgreSQL, Redis, Kafka libraries
+- Creates `bin/distribution-service` executable
+
+**Output:** `bin/distribution-service` (1.0MB)
+
+**Dependencies:** Requires `make proto` first
+
+**Configuration:** Uses `config/distribution-service.yml` (Docker) or `config/distribution-service-local.yml` (host)
+
+**Run locally:**
+
+```bash
+./bin/distribution-service ./config/distribution-service-local.yml
+```
+
+**Run in Docker:**
+
+```bash
+docker exec config-dev /workspace/bin/distribution-service /workspace/config/distribution-service.yml
+```
+
+---
+
 ### `make services`
 
-Build all C++ services.
+Placeholder for building all services (currently a no-op).
 
 ```bash
 make services
 ```
 
-**Currently builds:**
-
-- Distribution Service (`bin/distribution-service`)
+**Note:** Use `make distribution-service` to build the distribution service specifically.
 
 **Coming soon:**
 
