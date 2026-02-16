@@ -77,16 +77,17 @@ std::string EventPublisher::BuildEventJson(const std::string& event_type,
                                            const std::string& service_name,
                                            const std::string& instance_id, int64_t version) {
     std::ostringstream json;
-    json << "{"
-         << "\"event_type\":\"" << event_type << "\","
-         << "\"service_name\":\"" << service_name << "\","
-         << "\"instance_id\":\"" << instance_id << "\"";
+    json << "{";
+    json << "\"event_type\":\"" << event_type << "\",";
+    json << "\"service_name\":\"" << service_name << "\",";
+    json << "\"instance_id\":\"" << instance_id << "\"";
 
     if (version > 0) {
         json << ",\"version\":" << version;
     }
 
-    json << ",\"timestamp\":" << std::time(nullptr) << "}";
+    json << ",\"timestamp\":" << std::time(nullptr);
+    json << "}";
 
     return json.str();
 }
