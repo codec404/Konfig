@@ -1,7 +1,7 @@
 # Dynamic Configuration Service Makefile
 
 .PHONY: help setup infra-up infra-down infra-restart infra-logs infra-ps \
-        verify cleanup proto services sdk test clean install all rebuild \
+        verify cleanup proto distribution-service services sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
     	format format-check \
         example test-statsd \
@@ -52,7 +52,8 @@ help:
 	@echo ""
 	@echo "$(GREEN)Local Development (Mac/Linux):$(NC)"
 	@echo "  make proto           - Generate protobuf and gRPC code"
-	@echo "  make services        - Build all C++ services"
+	@echo "  make distribution-service - Build distribution service"
+	@echo "  make services        - Build all services (placeholder)"
 	@echo "  make sdk             - Build client SDK"
 	@echo "  make all             - Build everything"
 	@echo "  make example         - Build example client"
@@ -368,8 +369,8 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
     # macOS
     CXX := clang++
-    INCLUDES_BASE := -I/opt/homebrew/include -I/usr/local/include
-    LDFLAGS_BASE := -L/opt/homebrew/lib -L/usr/local/lib
+    INCLUDES_BASE := -I/opt/homebrew/include -I/usr/local/include -I/opt/homebrew/opt/libpq/include
+    LDFLAGS_BASE := -L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/libpq/lib
 else
     # Linux (Docker)
     CXX := g++
@@ -454,10 +455,38 @@ cli-clean:
 	@cd $(CLI_DIR) && go clean
 
 #==============================================================================
+# SERVICES
+#==============================================================================
+
+# Distribution Service
+DIST_SERVICE_DIR := $(SRC_DIR)/distribution-service
+DIST_SERVICE_SRCS := $(wildcard $(DIST_SERVICE_DIR)/*.cpp)
+DIST_SERVICE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(DIST_SERVICE_SRCS))
+DIST_SERVICE_BIN := $(BIN_DIR)/distribution-service
+
+# Build distribution service
+$(DIST_SERVICE_BIN): $(DIST_SERVICE_OBJS) $(PROTO_OBJS) $(STATSD_OBJ) | $(BIN_DIR)
+	@echo "$(YELLOW)Linking Distribution Service...$(NC)"
+	@$(CXX) $(LDFLAGS) $^ $(SERVICE_LIBS) -o $@
+	@echo "$(GREEN)✓ Built $@$(NC)"
+
+# Compile distribution service files
+$(BUILD_DIR)/distribution-service/%.o: $(SRC_DIR)/distribution-service/%.cpp | $(BUILD_DIR)/distribution-service
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/distribution-service:
+	@mkdir -p $@
+
+# Distribution service target
+distribution-service: $(DIST_SERVICE_BIN)
+	@echo "$(GREEN)✓ Distribution service built successfully$(NC)"
+
+#==============================================================================
 # BUILD TARGETS
 #==============================================================================
 
-all: proto services sdk
+all: proto distribution-service sdk
 
 proto: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)
 	@echo "$(GREEN)✓ Proto files generated$(NC)"
