@@ -502,7 +502,7 @@ services: $(DIST_SERVICE_BIN) $(API_SERVICE_BIN)
 # BUILD TARGETS
 #==============================================================================
 
-all: proto services sdk
+all: proto distribution-service sdk
 
 proto: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)
 	@echo "$(GREEN)✓ Proto files generated$(NC)"
