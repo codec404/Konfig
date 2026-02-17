@@ -476,12 +476,13 @@ bool ApiServiceImpl::PublishEvent(const std::string& event_type, const std::stri
     }
 
     std::ostringstream event;
-    event << "{"
-          << "\"event_type\":\"" << event_type << "\","
-          << "\"service_name\":\"" << service_name << "\","
-          << "\"version\":" << version << ","
-          << "\"performed_by\":\"" << performed_by << "\","
-          << "\"timestamp\":" << std::time(nullptr) << "}";
+    event << "{";
+    event << "\"event_type\":\"" << event_type << "\",";
+    event << "\"service_name\":\"" << service_name << "\",";
+    event << "\"version\":" << version << ",";
+    event << "\"performed_by\":\"" << performed_by << "\",";
+    event << "\"timestamp\":" << std::time(nullptr);
+    event << "}";
 
     std::string event_str = event.str();
 
