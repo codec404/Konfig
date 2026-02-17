@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package configservice;
 
-option go_package = "github.com/codec404/Konfig/proto";
+option go_package = "github.com/codec404/Konfig/pkg/pb";
 
 // Validation Service - validates configurations
 service ValidationService {

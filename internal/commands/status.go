@@ -1,57 +1,88 @@
 package commands
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"time"
 
+	"github.com/codec404/Konfig/pkg/apiclient"
 	"github.com/spf13/cobra"
 )
 
 func NewStatusCommand() *cobra.Command {
+	var server string
+
 	cmd := &cobra.Command{
-		Use:   "status [service-name]",
-		Short: "Show service configuration status",
-		Long: `Display the current status of service instances and their configurations.
+		Use:   "status [config-id]",
+		Short: "Show rollout status for a configuration",
+		Long: `Display the rollout status of a configuration.
 
 Examples:
-  configctl status my-service
-  configctl status --all`,
-		Args: cobra.MaximumNArgs(1),
+  konfig status my-service-v5`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var serviceName string
-			if len(args) > 0 {
-				serviceName = args[0]
+			configID := args[0]
+
+			// Get server
+			if server == "" {
+				server = os.Getenv("KONFIG_SERVER")
+				if server == "" {
+					server = "localhost:8081"
+				}
 			}
 
-			fmt.Println("📊 Service Configuration Status")
-			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			// Create client
+			client, err := apiclient.NewClient(server)
+			if err != nil {
+				return fmt.Errorf("failed to connect: %w", err)
+			}
+			defer client.Close()
+
+			// Get status
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			resp, err := client.GetRolloutStatus(ctx, configID)
+			if err != nil {
+				return fmt.Errorf("status query failed: %w", err)
+			}
+
+			if !resp.Success {
+				return fmt.Errorf("status query failed")
+			}
+
+			state := resp.RolloutState
+
+			fmt.Println("📊 Rollout Status")
+			fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+			fmt.Printf("Config ID:     %s\n", state.ConfigId)
+			fmt.Printf("Strategy:      %s\n", state.Strategy)
+			fmt.Printf("Progress:      %d%% / %d%%\n", state.CurrentPercentage, state.TargetPercentage)
+			fmt.Printf("Status:        %s\n", state.Status)
+			fmt.Printf("Started:       %s\n", time.Unix(state.StartedAt, 0).Format(time.RFC3339))
+			if state.CompletedAt > 0 {
+				fmt.Printf("Completed:     %s\n", time.Unix(state.CompletedAt, 0).Format(time.RFC3339))
+			}
 			fmt.Println()
 
-			if serviceName != "" {
-				fmt.Printf("Service: %s\n", serviceName)
-				fmt.Printf("Current Version: 5\n")
-				fmt.Printf("Active Instances: 10\n")
-				fmt.Printf("Last Updated: 2 hours ago\n")
-				fmt.Println()
-
-				// Instance status
-				fmt.Println("Instance Status:")
-				fmt.Printf("%-25s %-10s %-15s %s\n", "INSTANCE", "VERSION", "STATUS", "LAST SEEN")
-				fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-				fmt.Printf("%-25s %-10d %-15s %s\n", "instance-001", 5, "✓ Connected", "1 min ago")
-				fmt.Printf("%-25s %-10d %-15s %s\n", "instance-002", 5, "✓ Connected", "2 min ago")
-				fmt.Printf("%-25s %-10d %-15s %s\n", "instance-003", 4, "⚠ Outdated", "5 min ago")
-			} else {
-				// Show all services
-				fmt.Printf("%-20s %-10s %-12s %-15s\n", "SERVICE", "VERSION", "INSTANCES", "STATUS")
-				fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-				fmt.Printf("%-20s %-10d %-12d %s\n", "api-gateway", 5, 10, "✓ Healthy")
-				fmt.Printf("%-20s %-10d %-12d %s\n", "auth-service", 3, 5, "✓ Healthy")
-				fmt.Printf("%-20s %-10d %-12d %s\n", "payment-service", 12, 8, "⚠ 2 outdated")
+			if len(resp.Instances) > 0 {
+				fmt.Println("Instances:")
+				fmt.Printf("%-30s %-10s %-15s\n", "INSTANCE ID", "VERSION", "STATUS")
+				fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+				for _, inst := range resp.Instances {
+					fmt.Printf("%-30s %-10d %-15s\n",
+						truncate(inst.InstanceId, 30),
+						inst.CurrentConfigVersion,
+						inst.Status)
+				}
 			}
 
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&server, "server", "", "API server address")
 
 	return cmd
 }
