@@ -1,0 +1,26 @@
+server:
+  port: 8081
+  max_connections: 1000
+
+postgres:
+  host: postgres
+  port: 5432
+  database: configservice
+  user: configuser
+  password: configpass
+  max_connections: 25
+  connection_timeout: 10
+
+kafka:
+  brokers: kafka:9092
+  topic: config.events
+
+redis:
+  host: redis
+  port: 6379
+  cache_ttl: 300
+
+statsd:
+  host: statsd-exporter
+  port: 9125
+  prefix: api
