@@ -29,6 +29,7 @@ temp/
 # Go
 cmd/configctl/configctl
 *.exe
+*.pb.go
 
 # Environment
 .env
