@@ -6,36 +6,109 @@ option go_package = "github.com/codec404/Konfig/pkg/pb";
 
 // Validation Service - validates configurations
 service ValidationService {
-    // Validate configuration content
+    // Validate a configuration
     rpc ValidateConfig(ValidateConfigRequest) returns (ValidateConfigResponse);
     
-    // Validate against schema
-    rpc ValidateSchema(ValidateSchemaRequest) returns (ValidateSchemaResponse);
+    // Register a validation schema
+    rpc RegisterSchema(RegisterSchemaRequest) returns (RegisterSchemaResponse);
+    
+    // Get validation schema
+    rpc GetSchema(GetSchemaRequest) returns (GetSchemaResponse);
+    
+    // List schemas
+    rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
 }
 
+// Validation request
 message ValidateConfigRequest {
-    string content = 1;
-    string format = 2;              // "json", "yaml", "toml"
-    string schema = 3;              // Optional JSON schema
+    string service_name = 1;
+    string content = 2;
+    string format = 3;          // json, yaml, toml
+    string schema_id = 4;       // Optional: specific schema to validate against
+    bool strict = 5;            // Strict validation mode
 }
 
+// Validation response
 message ValidateConfigResponse {
     bool valid = 1;
     repeated ValidationError errors = 2;
-    repeated string warnings = 3;
+    repeated ValidationWarning warnings = 3;
+    string message = 4;
 }
 
+// Validation error
 message ValidationError {
-    string field = 1;               // Field path (e.g., "database.port")
-    string message = 2;             // Error message
-    string error_type = 3;          // "syntax", "schema", "semantic"
+    string field = 1;           // Field path (e.g., "settings.max_connections")
+    string error_type = 2;      // "required", "type", "range", "format", "custom"
+    string message = 3;         // Human-readable error message
+    int32 line = 4;             // Line number in config file
+    int32 column = 5;           // Column number
 }
 
-message ValidateSchemaRequest {
-    string schema = 1;              // JSON schema to validate
+// Validation warning
+message ValidationWarning {
+    string field = 1;
+    string warning_type = 2;    // "deprecated", "unused", "suggestion"
+    string message = 3;
 }
 
-message ValidateSchemaResponse {
-    bool valid = 1;
+// Schema registration
+message RegisterSchemaRequest {
+    string schema_id = 1;       // Unique schema identifier
+    string service_name = 2;    // Service this schema applies to
+    string schema_type = 3;     // "json-schema", "custom"
+    string schema_content = 4;  // Actual schema definition
+    string description = 5;
+    string created_by = 6;
+}
+
+message RegisterSchemaResponse {
+    bool success = 1;
     string message = 2;
+    string schema_id = 3;
+}
+
+// Get schema
+message GetSchemaRequest {
+    string schema_id = 1;
+}
+
+message GetSchemaResponse {
+    bool success = 1;
+    ValidationSchema schema = 2;
+    string message = 3;
+}
+
+// List schemas
+message ListSchemasRequest {
+    string service_name = 1;    // Filter by service (optional)
+    int32 limit = 2;
+    int32 offset = 3;
+}
+
+message ListSchemasResponse {
+    repeated ValidationSchema schemas = 1;
+    int32 total_count = 2;
+}
+
+// Schema definition
+message ValidationSchema {
+    string schema_id = 1;
+    string service_name = 2;
+    string schema_type = 3;
+    string schema_content = 4;
+    string description = 5;
+    string created_by = 6;
+    int64 created_at = 7;
+    bool is_active = 8;
+}
+
+// Validation rules (built-in validators)
+enum ValidationType {
+    SYNTAX = 0;                 // JSON/YAML syntax check
+    SCHEMA = 1;                 // Schema validation (JSON Schema)
+    RANGE = 2;                  // Value range validation
+    REQUIRED = 3;               // Required fields
+    FORMAT = 4;                 // Format validation (email, url, etc)
+    CUSTOM = 5;                 // Custom validation logic
 }
