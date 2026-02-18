@@ -59,7 +59,7 @@ bool ApiServiceImpl::Initialize() {
     }
 
     // Validation client
-    validation_client_ = std::make_unique<ValidationClient>("localhost:8083");
+    validation_client_ = std::make_unique<ValidationClient>(config_.validation.address);
     if (validation_client_->Initialize()) {
         std::cout << "[ApiService] ✓ Validation client connected" << std::endl;
     } else {

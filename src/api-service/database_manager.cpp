@@ -299,25 +299,21 @@ std::pair<bool, std::string> DatabaseManager::CreateRollout(const std::string& c
     try {
         pqxx::work txn(*conn_);
 
-        // Generate rollout_id
-        std::string rollout_id = "rollout-" + config_id;
-
-        txn.exec_params(
-            "INSERT INTO rollouts "
-            "  (rollout_id, config_id, strategy, target_percentage, "
-            "   current_percentage, status, started_at) "
-            "VALUES ($1, $2, $3, $4, 0, 'IN_PROGRESS', EXTRACT(EPOCH FROM NOW())::BIGINT) "
-            "ON CONFLICT (config_id) DO UPDATE "
-            "SET strategy = $3, target_percentage = $4, "
-            "    status = 'IN_PROGRESS', "
-            "    started_at = EXTRACT(EPOCH FROM NOW())::BIGINT",
-            rollout_id, config_id, static_cast<int>(strategy), target_percentage);
+        txn.exec_params("INSERT INTO rollout_state "
+                        "  (config_id, strategy, target_percentage, "
+                        "   current_percentage, status, started_at) "
+                        "VALUES ($1, $2, $3, 0, 'IN_PROGRESS', NOW()) "
+                        "ON CONFLICT (config_id) DO UPDATE "
+                        "SET strategy = $2, target_percentage = $3, "
+                        "    status = 'IN_PROGRESS', "
+                        "    started_at = NOW()",
+                        config_id, static_cast<int>(strategy), target_percentage);
 
         txn.commit();
 
-        std::cout << "[DB] Created rollout: " << rollout_id << std::endl;
+        std::cout << "[DB] Created rollout for config: " << config_id << std::endl;
 
-        return {true, rollout_id};
+        return {true, config_id};
 
     } catch (const std::exception& e) {
         std::cerr << "[DB] CreateRollout failed: " << e.what() << std::endl;
@@ -333,12 +329,15 @@ configservice::RolloutState DatabaseManager::GetRolloutState(const std::string& 
     try {
         pqxx::work txn(*conn_);
 
-        pqxx::result r = txn.exec_params("SELECT config_id, strategy, target_percentage, "
-                                         "       current_percentage, status, started_at, "
-                                         "       COALESCE(completed_at, 0) as completed_at "
-                                         "FROM rollouts "
-                                         "WHERE config_id = $1",
-                                         config_id);
+        pqxx::result r =
+            txn.exec_params("SELECT config_id, strategy, target_percentage, "
+                            "       current_percentage, status, "
+                            "       EXTRACT(EPOCH FROM started_at)::BIGINT as started_at, "
+                            "       EXTRACT(EPOCH FROM COALESCE(completed_at, TIMESTAMP "
+                            "'epoch'))::BIGINT as completed_at "
+                            "FROM rollout_state "
+                            "WHERE config_id = $1",
+                            config_id);
 
         txn.commit();
 

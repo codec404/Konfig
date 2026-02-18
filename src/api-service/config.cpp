@@ -42,6 +42,11 @@ ServiceConfig ServiceConfig::LoadFromFile(const std::string& path) {
             config.statsd.prefix = yaml["statsd"]["prefix"].as<std::string>("api");
         }
 
+        if (yaml["validation_service"]) {
+            config.validation.address =
+                yaml["validation_service"]["address"].as<std::string>("validation-service:8083");
+        }
+
         std::cout << "[Config] Loaded from: " << path << std::endl;
 
     } catch (const YAML::Exception& e) {
