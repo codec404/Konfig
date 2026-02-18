@@ -1,0 +1,8 @@
+{
+  "service": "payment-service",
+  "settings": {
+    "max_connections": 5000,
+    "timeout_ms": 100000,
+    "concurrency": 100
+  }
+}

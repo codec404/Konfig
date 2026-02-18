@@ -1,0 +1,11 @@
+{
+  "service": "payment-service",
+  "settings": {
+    "max_connections": 100,
+    "timeout_ms": 5000,
+    "concurrency": 10
+  },
+  "database": {
+    "host": "payment-db.internal"
+  }
+}
