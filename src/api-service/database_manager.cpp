@@ -1,6 +1,7 @@
 #include "api_service/database_manager.h"
 
 #include <ctime>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 
@@ -89,12 +90,18 @@ std::pair<bool, std::string> DatabaseManager::InsertConfig(const configservice::
 
         // Insert into config_metadata
         txn.exec_params("INSERT INTO config_metadata "
-                        "  (config_id, service_name, version, format, content, content_hash, "
-                        "   created_at, created_by, description, is_active) "
-                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)",
+                        "  (config_id, service_name, version, format, "
+                        "   created_by, description, is_active) "
+                        "VALUES ($1, $2, $3, $4, $5, $6, true)",
                         config.config_id(), config.service_name(), config.version(),
-                        config.format(), config.content(), config.content_hash(),
-                        config.created_at(), config.created_by(), description);
+                        config.format(), config.created_by(), description);
+
+        // Insert into config_data
+        txn.exec_params("INSERT INTO config_data "
+                        "  (config_id, content, content_hash, size_bytes) "
+                        "VALUES ($1, $2, $3, $4)",
+                        config.config_id(), config.content(), config.content_hash(),
+                        static_cast<int64_t>(config.content().size()));
 
         txn.commit();
 
@@ -115,11 +122,12 @@ configservice::ConfigData DatabaseManager::GetConfigById(const std::string& conf
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT config_id, service_name, version, content, format, "
-                            "       COALESCE(content_hash, '') as content_hash, "
-                            "       created_at, created_by "
-                            "FROM config_metadata "
-                            "WHERE config_id = $1",
+            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+                            "       COALESCE(d.content_hash, '') as content_hash, "
+                            "       m.created_at, m.created_by "
+                            "FROM config_metadata m "
+                            "JOIN config_data d ON m.config_id = d.config_id "
+                            "WHERE m.config_id = $1",
                             config_id);
 
         txn.commit();
@@ -143,12 +151,13 @@ configservice::ConfigData DatabaseManager::GetLatestConfig(const std::string& se
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT config_id, service_name, version, content, format, "
-                            "       COALESCE(content_hash, '') as content_hash, "
-                            "       created_at, created_by "
-                            "FROM config_metadata "
-                            "WHERE service_name = $1 "
-                            "ORDER BY version DESC LIMIT 1",
+            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+                            "       COALESCE(d.content_hash, '') as content_hash, "
+                            "       m.created_at, m.created_by "
+                            "FROM config_metadata m "
+                            "JOIN config_data d ON m.config_id = d.config_id "
+                            "WHERE m.service_name = $1 "
+                            "ORDER BY m.version DESC LIMIT 1",
                             service_name);
 
         txn.commit();
@@ -173,11 +182,12 @@ configservice::ConfigData DatabaseManager::GetConfigByVersion(const std::string&
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT config_id, service_name, version, content, format, "
-                            "       COALESCE(content_hash, '') as content_hash, "
-                            "       created_at, created_by "
-                            "FROM config_metadata "
-                            "WHERE service_name = $1 AND version = $2",
+            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+                            "       COALESCE(d.content_hash, '') as content_hash, "
+                            "       m.created_at, m.created_by "
+                            "FROM config_metadata m "
+                            "JOIN config_data d ON m.config_id = d.config_id "
+                            "WHERE m.service_name = $1 AND m.version = $2",
                             service_name, version);
 
         txn.commit();
@@ -377,12 +387,13 @@ std::vector<configservice::ServiceInstance> DatabaseManager::GetServiceInstances
     try {
         pqxx::work txn(*conn_);
 
-        pqxx::result r = txn.exec_params("SELECT service_name, instance_id, current_version, "
-                                         "       last_heartbeat, status "
-                                         "FROM client_instances "
-                                         "WHERE service_name = $1 "
-                                         "ORDER BY instance_id",
-                                         service_name);
+        pqxx::result r =
+            txn.exec_params("SELECT service_name, instance_id, current_config_version, "
+                            "       last_heartbeat, status "
+                            "FROM service_instances "
+                            "WHERE service_name = $1 "
+                            "ORDER BY instance_id",
+                            service_name);
 
         txn.commit();
 
@@ -390,7 +401,7 @@ std::vector<configservice::ServiceInstance> DatabaseManager::GetServiceInstances
             configservice::ServiceInstance instance;
             instance.set_service_name(row["service_name"].as<std::string>());
             instance.set_instance_id(row["instance_id"].as<std::string>());
-            instance.set_current_config_version(row["current_version"].as<int64_t>(0));
+            instance.set_current_config_version(row["current_config_version"].as<int64_t>(0));
             instance.set_last_heartbeat(row["last_heartbeat"].as<int64_t>(0));
             instance.set_status(row["status"].as<std::string>("unknown"));
             instances.push_back(instance);
@@ -411,10 +422,11 @@ void DatabaseManager::RecordAuditEvent(const std::string& service_name,
     try {
         pqxx::work txn(*conn_);
 
-        txn.exec_params("INSERT INTO config_audit "
-                        "  (service_name, config_id, action, performed_by, details) "
-                        "VALUES ($1, $2, $3, $4, $5)",
-                        service_name, config_id, action, performed_by, details);
+        txn.exec_params("INSERT INTO audit_log "
+                        "  (config_id, action, performed_by, details) "
+                        "VALUES ($1, $2, $3, jsonb_build_object('service_name', $4::text, "
+                        "'details', $5::text))",
+                        config_id, action, performed_by, service_name, details);
 
         txn.commit();
 
@@ -431,7 +443,18 @@ configservice::ConfigData DatabaseManager::ParseConfigRow(const pqxx::row& row) 
     config.set_content(row["content"].as<std::string>());
     config.set_format(row["format"].as<std::string>());
     config.set_content_hash(row["content_hash"].as<std::string>(""));
-    config.set_created_at(row["created_at"].as<int64_t>());
+
+    // Convert PostgreSQL TIMESTAMP to Unix timestamp
+    if (!row["created_at"].is_null()) {
+        auto ts = row["created_at"].as<std::string>();
+        std::tm tm = {};
+        std::istringstream ss(ts);
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+        config.set_created_at(ss.fail() ? 0 : static_cast<int64_t>(std::mktime(&tm)));
+    } else {
+        config.set_created_at(0);
+    }
+
     config.set_created_by(row["created_by"].as<std::string>());
     return config;
 }
@@ -442,7 +465,17 @@ configservice::ConfigMetadata DatabaseManager::ParseMetadataRow(const pqxx::row&
     meta.set_service_name(row["service_name"].as<std::string>());
     meta.set_version(row["version"].as<int64_t>());
     meta.set_format(row["format"].as<std::string>());
-    meta.set_created_at(row["created_at"].as<int64_t>());
+
+    if (!row["created_at"].is_null()) {
+        auto ts = row["created_at"].as<std::string>();
+        std::tm tm = {};
+        std::istringstream ss(ts);
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+        meta.set_created_at(ss.fail() ? 0 : static_cast<int64_t>(std::mktime(&tm)));
+    } else {
+        meta.set_created_at(0);
+    }
+
     meta.set_created_by(row["created_by"].as<std::string>());
     meta.set_description(row["description"].as<std::string>(""));
     meta.set_is_active(row["is_active"].as<bool>(true));
