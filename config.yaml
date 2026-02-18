@@ -1,0 +1,9 @@
+service: payment-service
+environment: production
+settings:
+  max_connections: 100
+  timeout_ms: 5000    # ⚠️ Tab character here (intentional error)
+  features:
+    fraud_detection: true
+  database:
+    host: db.payment.internal

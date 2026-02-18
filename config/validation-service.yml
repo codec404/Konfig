@@ -1,0 +1,28 @@
+server:
+  port: 8083
+  max_connections: 500
+
+postgres:
+  host: postgres
+  port: 5432
+  database: configservice
+  user: configuser
+  password: configpass
+  max_connections: 10
+  connection_timeout: 10
+
+redis:
+  host: redis
+  port: 6379
+  cache_ttl: 600  # 10 minutes
+
+statsd:
+  host: statsd-exporter
+  port: 9125
+  prefix: validation
+
+validation:
+  max_config_size: 1048576      # 1MB
+  timeout_seconds: 5
+  enable_caching: true
+  strict_mode: false

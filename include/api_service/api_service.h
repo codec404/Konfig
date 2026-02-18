@@ -11,6 +11,7 @@
 #include "api.grpc.pb.h"
 #include "database_manager.h"
 #include "statsdclient/statsd_client.h"
+#include "validation_client.h"
 
 namespace apiservice {
 
@@ -59,6 +60,7 @@ class ApiServiceImpl final : public configservice::ConfigAPIService::Service {
     std::unique_ptr<DatabaseManager> db_;
     std::unique_ptr<RdKafka::Producer> kafka_producer_;
     std::unique_ptr<statsdclient::StatsDClient> statsd_;
+    std::unique_ptr<ValidationClient> validation_client_;
     bool initialized_;
 
     // Helpers
