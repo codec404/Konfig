@@ -209,9 +209,8 @@ void DatabaseManager::RecordValidation(const std::string& service_name, const st
         txn.exec_params("INSERT INTO validation_history "
                         "  (service_name, config_content, validation_result, "
                         "   errors, warnings, validated_at, validated_by) "
-                        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                        service_name, content, result, errors, warnings, std::time(nullptr),
-                        validated_by);
+                        "VALUES ($1, $2, $3, $4, $5, NOW(), $6)",
+                        service_name, content, result, errors, warnings, validated_by);
 
         txn.commit();
 

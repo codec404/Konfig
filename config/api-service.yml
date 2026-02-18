@@ -24,3 +24,6 @@ statsd:
   host: statsd-exporter
   port: 9125
   prefix: api
+
+validation_service:
+  address: validation-service:8083

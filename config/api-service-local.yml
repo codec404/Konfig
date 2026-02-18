@@ -24,3 +24,6 @@ statsd:
   host: localhost
   port: 9125
   prefix: api
+
+validation_service:
+  address: localhost:8083

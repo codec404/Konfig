@@ -18,6 +18,73 @@ services:
     stdin_open: true
     tty: true
     command: tail -f /dev/null
+
+  # ─── Application Services ───────────────────────────────────────────
+
+  api-service:
+    build:
+      context: .
+      dockerfile: docker/services/api-service.Dockerfile
+    container_name: config-api-service
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./config:/app/config
+    networks:
+      - config-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      statsd-exporter:
+        condition: service_healthy
+    restart: unless-stopped
+
+  distribution-service:
+    build:
+      context: .
+      dockerfile: docker/services/distribution-service.Dockerfile
+    container_name: config-distribution-service
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./config:/app/config
+    networks:
+      - config-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      statsd-exporter:
+        condition: service_healthy
+    restart: unless-stopped
+
+  validation-service:
+    build:
+      context: .
+      dockerfile: docker/services/validation-service.Dockerfile
+    container_name: config-validation-service
+    ports:
+      - "8083:8083"
+    volumes:
+      - ./config:/app/config
+    networks:
+      - config-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      statsd-exporter:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ─── Infrastructure ─────────────────────────────────────────────────
+
   postgres:
     image: postgres:15-alpine
     container_name: config-postgres
