@@ -4,7 +4,7 @@ package configservice;
 
 import "config.proto";
 
-option go_package = "github.com/codec404/Konfig/proto";
+option go_package = "github.com/codec404/Konfig/pkg/pb";
 
 // API Service - handles config uploads and management
 service ConfigAPIService {

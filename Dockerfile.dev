@@ -5,6 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     build-essential \
     cmake \
     git \
@@ -43,8 +44,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     clang-format \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Go (detect architecture for Apple Silicon / x86)
+ENV GO_VERSION=1.23.4
+RUN ARCH=$(dpkg --print-architecture) && \
+    curl -L -o /tmp/go.tar.gz https://dl.google.com/go/go${GO_VERSION}.linux-${ARCH}.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# Install Go protobuf plugins to /usr/local/bin (available to all users)
+RUN GOBIN=/usr/local/bin go install google.golang.org/protobuf/cmd/protoc-gen-go@latest && \
+    GOBIN=/usr/local/bin go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
 # Create non-root user
 RUN groupadd -r devuser && useradd -r -g devuser -m -s /bin/bash devuser
+
+# Set Go environment for devuser
+ENV GOPATH="/home/devuser/go"
+ENV PATH="${GOPATH}/bin:${PATH}"
 
 # Set working directory
 WORKDIR /workspace

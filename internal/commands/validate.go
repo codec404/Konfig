@@ -21,9 +21,9 @@ func NewValidateCommand() *cobra.Command {
 		Long: `Validate configuration file syntax and schema.
 
 Examples:
-  configctl validate config.json
-  configctl validate config.yaml --format yaml
-  configctl validate config.json --schema schema.json`,
+  konfig validate config.json
+  konfig validate config.yaml --format yaml
+  konfig validate config.json --schema schema.json`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configFile := args[0]
