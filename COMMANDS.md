@@ -1,46 +1,38 @@
-# Dynamic Configuration Service - Command Reference
+# Konfig - Command Reference
 
-Quick reference for all available `make` commands in the project.
-
----
-
-## 📋 Table of Contents
-
-- [Infrastructure Management](#️-infrastructure-management)
-- [Development Container](#-development-container)
-- [Build Commands](#-build-commands-localinside-container)
-- [Database & Tools](#️-database--tools)
-- [Testing](#-testing)
-- [Cleanup](#-cleanup)
+Quick reference for all available `make` commands.
 
 ---
 
-## 🏗️ Infrastructure Management
+## Table of Contents
 
-### `make help`
+- [Infrastructure Management](#infrastructure-management)
+- [Service Containers](#service-containers)
+- [Build Commands](#build-commands)
+- [CLI Tool](#cli-tool)
+- [Development Container](#development-container)
+- [Database & Tools](#database--tools)
+- [Testing](#testing)
+- [Cleanup](#cleanup)
+- [Common Workflows](#common-workflows)
 
-Display all available commands with descriptions.
+---
 
-```bash
-make help
-```
+## Infrastructure Management
 
 ### `make dev` / `make setup`
 
-Complete project setup - creates directory structure and starts all infrastructure services.
+Complete project setup - creates directories and starts all infrastructure.
 
 ```bash
 make dev
 ```
 
 **What it does:**
-
 - Creates project directories
-- Starts Docker containers (PostgreSQL, Redis, Kafka, etc.)
-- Waits for all services to be ready
+- Starts Docker containers (PostgreSQL, Redis, Kafka, Prometheus, Grafana, etc.)
+- Waits for all services to be healthy
 - Verifies setup and displays access URLs
-
-**When to use:** First time setup or after a complete cleanup
 
 ---
 
@@ -52,35 +44,17 @@ Start all infrastructure services in Docker.
 make infra-up
 ```
 
-**Services started:**
-
-- PostgreSQL (database)
-- Redis (cache)
-- Kafka + Zookeeper (messaging)
-- Prometheus (metrics)
-- Grafana (visualization)
-- StatsD Exporter (metrics collection)
-- Kafka UI (management)
-- pgAdmin (database management)
-
-**When to use:** Daily development when you want to start services
+**Services started:** PostgreSQL, Redis, Kafka + Zookeeper, Prometheus, Grafana, StatsD Exporter, Kafka UI, pgAdmin
 
 ---
 
 ### `make infra-down`
 
-Stop all infrastructure services.
+Stop all infrastructure services. Keeps volumes (data persists).
 
 ```bash
 make infra-down
 ```
-
-**What it does:**
-
-- Stops all Docker containers
-- Keeps volumes (data persists)
-
-**When to use:** End of work session
 
 ---
 
@@ -92,25 +66,15 @@ Restart all infrastructure services.
 make infra-restart
 ```
 
-**When to use:** Services are misbehaving or after config changes
-
 ---
 
 ### `make infra-logs`
 
-Follow logs from all infrastructure services in real-time.
+Follow logs from all infrastructure services in real-time. Exit with `Ctrl+C`.
 
 ```bash
 make infra-logs
 ```
-
-**Useful for:**
-
-- Debugging connection issues
-- Monitoring service health
-- Watching for errors
-
-**Exit:** Press `Ctrl+C`
 
 ---
 
@@ -122,13 +86,6 @@ Show status of all running containers.
 make infra-ps
 ```
 
-**Output shows:**
-
-- Container names
-- Status (Up/Down)
-- Ports
-- Health status
-
 ---
 
 ### `make verify`
@@ -139,180 +96,85 @@ Verify all services are healthy and display connection information.
 make verify
 ```
 
-**What it checks:**
-
-- Creates Kafka topics
-- Displays database tables
-- Shows sample data
-- Lists all access URLs and credentials
-
-**When to use:** After `make dev` or when troubleshooting
-
 ---
 
-## 🐳 Development Container
+## Service Containers
 
-The development container provides a consistent Linux build environment with all dependencies pre-installed.
+### `make services`
 
-### `make dev-up`
-
-Start the development container.
+Build Docker images and start all three service containers (API, Distribution, Validation).
 
 ```bash
-make dev-up
+make services
 ```
 
 **What it does:**
+- Builds each service using its multi-stage Dockerfile
+- Starts containers with proper dependencies (waits for healthy postgres, redis, kafka)
+- Services are accessible on ports 8081, 8082, 8083
 
-- Builds dev container image (first time only)
-- Starts container in background
-- Mounts project directory to `/workspace`
-- Connects to Docker network with all services
-
-**When to use:** Before starting development work
+**Equivalent to:** `docker compose up --build -d api-service distribution-service validation-service`
 
 ---
 
-### `make dev-down`
+### `make services-down`
 
-Stop the development container.
+Stop all service containers.
 
 ```bash
-make dev-down
+make services-down
 ```
 
 ---
 
-### `make dev-shell`
+### `make services-local`
 
-Enter an interactive shell in the development container.
-
-```bash
-make dev-shell
-```
-
-**You'll be in:** `/workspace` (your project root)
-
-**Available tools:**
-
-- g++, cmake, make
-- protoc, grpc_cpp_plugin
-- psql, redis-cli
-- All project dependencies
-
-**Exit:** Type `exit` or press `Ctrl+D`
-
----
-
-### `make dev-build`
-
-Build the entire project inside the development container.
+Build all service binaries locally (no Docker). Output goes to `bin/`.
 
 ```bash
-make dev-build
-```
-
-**Builds:**
-
-- Proto files (gRPC/Protobuf)
-- Client SDK (shared + static libraries)
-- Distribution Service
-- Example clients
-
-**When to use:** After code changes, from the host machine
-
----
-
-### `make dev-proto`
-
-Generate only the protobuf/gRPC files.
-
-```bash
-make dev-proto
-```
-
-**Output:** `build/*.pb.cc`, `build/*.grpc.pb.cc`
-
----
-
-### `make dev-sdk`
-
-Build only the client SDK.
-
-```bash
-make dev-sdk
+make services-local
 ```
 
 **Output:**
-
-- `lib/libconfigclient.so` (shared library)
-- `lib/libconfigclient.a` (static library)
+- `bin/api-service`
+- `bin/distribution-service`
+- `bin/validation-service`
 
 ---
 
-### `make dev-example`
+### Individual Service Containers
 
-Build the example client application.
+Rebuild and restart a single service:
 
 ```bash
-make dev-example
+docker compose up --build -d api-service
+docker compose up --build -d distribution-service
+docker compose up --build -d validation-service
 ```
 
-**Output:** `bin/simple_client`
-
----
-
-### `make dev-test-statsd`
-
-Build and run the StatsD metrics test.
+View logs for a single service:
 
 ```bash
-make dev-test-statsd
+docker compose logs -f api-service
+docker compose logs -f distribution-service
+docker compose logs -f validation-service
 ```
-
-**What it does:**
-
-- Builds the StatsD test
-- Runs it (sends metrics for 10 seconds)
-- Displays metrics URLs
-
-**View results:**
-
-- Prometheus: <http://localhost:9090>
-- Grafana: <http://localhost:3000>
-- StatsD Exporter: <http://localhost:9102/metrics>
 
 ---
 
-### `make dev-clean`
+## Build Commands
 
-Clean build artifacts in the development container.
-
-```bash
-make dev-clean
-```
-
-**Removes:**
-
-- `build/` directory
-- `bin/` directory
-- `lib/` directory
-
----
-
-## 🔨 Build Commands (Local/Inside Container)
-
-These commands work when you're inside the dev container or on a compatible Linux/Mac system.
+These work on the host machine (macOS/Linux) or inside the dev container.
 
 ### `make all`
 
-Build everything - proto files, SDK, and services.
+Build everything locally - proto files, SDK, services, and CLI.
 
 ```bash
 make all
 ```
 
-**Equivalent to:** `make proto distribution-service sdk`
+**Equivalent to:** `make proto sdk services-local cli`
 
 ---
 
@@ -329,71 +191,82 @@ make proto
 
 ---
 
+### `make api-service`
+
+Build the API Service binary locally.
+
+```bash
+make api-service
+```
+
+**Output:** `bin/api-service`
+
+**Run locally:**
+```bash
+./bin/api-service config/api-service-local.yml
+```
+
+---
+
+### `make distribution-service`
+
+Build the Distribution Service binary locally.
+
+```bash
+make distribution-service
+```
+
+**Output:** `bin/distribution-service`
+
+**Run locally:**
+```bash
+./bin/distribution-service config/distribution-service-local.yml
+```
+
+---
+
+### `make validation-service`
+
+Build the Validation Service binary locally.
+
+```bash
+make validation-service
+```
+
+**Output:** `bin/validation-service`
+
+**Run locally:**
+```bash
+./bin/validation-service config/validation-service.yml
+```
+
+---
+
 ### `make sdk`
 
-Build the client SDK (both shared and static libraries).
+Build the client SDK (shared and static libraries).
 
 ```bash
 make sdk
 ```
 
 **Output:**
-
-- `lib/libconfigclient.so`
-- `lib/libconfigclient.a`
-
-**Dependencies:** Requires `make proto` first
+- `lib/libconfigclient.so` (shared library)
+- `lib/libconfigclient.a` (static library)
 
 ---
 
-### `make distribution-service`
+### `make cli`
 
-Build the Distribution Service (C++ gRPC service).
-
-```bash
-make distribution-service
-```
-
-**What it does:**
-
-- Compiles all distribution service source files
-- Links with protobuf, gRPC, PostgreSQL, Redis, Kafka libraries
-- Creates `bin/distribution-service` executable
-
-**Output:** `bin/distribution-service` (1.0MB)
-
-**Dependencies:** Requires `make proto` first
-
-**Configuration:** Uses `config/distribution-service.yml` (Docker) or `config/distribution-service-local.yml` (host)
-
-**Run locally:**
+Build the CLI tool (`konfig`).
 
 ```bash
-./bin/distribution-service ./config/distribution-service-local.yml
+make cli
 ```
 
-**Run in Docker:**
+**Output:** `bin/konfig`
 
-```bash
-docker exec config-dev /workspace/bin/distribution-service /workspace/config/distribution-service.yml
-```
-
----
-
-### `make services`
-
-Placeholder for building all services (currently a no-op).
-
-```bash
-make services
-```
-
-**Note:** Use `make distribution-service` to build the distribution service specifically.
-
-**Coming soon:**
-
-- API Service
-- Validation Service
+**Requires:** Go toolchain and generated Go proto files
 
 ---
 
@@ -407,44 +280,15 @@ make example
 
 **Output:** `bin/simple_client`
 
-**Run it:**
-
-```bash
-./bin/simple_client
-# or specify server
-./bin/simple_client localhost:8082 my-service
-```
-
----
-
-### `make test-statsd`
-
-Build and run the StatsD metrics test.
-
-```bash
-make test-statsd
-```
-
-**Duration:** ~10 seconds
-**Metrics sent:** Counters, gauges, timings, histograms
-
 ---
 
 ### `make clean`
 
-Remove all build artifacts.
+Remove all build artifacts (`build/`, `bin/`, `lib/`).
 
 ```bash
 make clean
 ```
-
-**Removes:**
-
-- `build/`
-- `bin/`
-- `lib/`
-
-**Keeps:** Source code, proto files, config files
 
 ---
 
@@ -456,11 +300,169 @@ Clean and rebuild everything.
 make rebuild
 ```
 
-**Equivalent to:** `make clean && make all`
+---
+
+### `make format`
+
+Format all C++ source files using clang-format.
+
+```bash
+make format
+```
 
 ---
 
-## 🗄️ Database & Tools
+### `make format-check`
+
+Check C++ formatting without modifying files.
+
+```bash
+make format-check
+```
+
+---
+
+## CLI Tool
+
+The `konfig` CLI communicates with the API Service via gRPC.
+
+### Upload Configuration
+
+```bash
+./bin/konfig upload --service payment-service --file config.json --format json
+```
+
+### Get Configuration
+
+```bash
+./bin/konfig get --id payment-service-v1
+```
+
+### List Configurations
+
+```bash
+./bin/konfig list --service payment-service
+```
+
+### Validate Configuration
+
+```bash
+./bin/konfig validate --service payment-service --file config.json --format json
+```
+
+### Delete Configuration
+
+```bash
+./bin/konfig delete --id payment-service-v1
+```
+
+### Rollout Status
+
+```bash
+./bin/konfig status --id payment-service-v1
+```
+
+### Rollback
+
+```bash
+./bin/konfig rollback --service payment-service --version 1
+```
+
+### Global Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-s, --server` | API server address | `localhost:8081` |
+| `-o, --output` | Output format: table, json, yaml | `table` |
+| `-v, --verbose` | Verbose output | `false` |
+
+### Version
+
+```bash
+./bin/konfig version
+```
+
+---
+
+## Development Container
+
+The dev container provides a Linux build environment with all C++ dependencies pre-installed.
+
+### `make dev-up`
+
+Start the development container.
+
+```bash
+make dev-up
+```
+
+---
+
+### `make dev-down`
+
+Stop the development container.
+
+```bash
+make dev-down
+```
+
+---
+
+### `make dev-shell`
+
+Enter an interactive shell in the dev container (`/workspace`).
+
+```bash
+make dev-shell
+```
+
+Available tools: g++, cmake, make, protoc, grpc_cpp_plugin, psql, redis-cli
+
+---
+
+### `make dev-build`
+
+Build the entire project inside the dev container.
+
+```bash
+make dev-build
+```
+
+---
+
+### `make dev-proto` / `make dev-sdk` / `make dev-example`
+
+Build individual components inside the dev container.
+
+```bash
+make dev-proto
+make dev-sdk
+make dev-example
+```
+
+---
+
+### `make dev-clean`
+
+Clean build artifacts inside the dev container.
+
+```bash
+make dev-clean
+```
+
+---
+
+### `make dev-test-statsd`
+
+Build and run StatsD metrics test inside the dev container.
+
+```bash
+make dev-test-statsd
+```
+
+---
+
+## Database & Tools
 
 ### `make db-shell`
 
@@ -470,19 +472,13 @@ Open PostgreSQL interactive shell.
 make db-shell
 ```
 
-**Connection:**
-
-- Database: `configservice`
-- User: `configuser`
-- Password: `configpass`
-
-**Example commands:**
-
+**Useful commands:**
 ```sql
-\dt                    -- List tables
-\d config_metadata     -- Describe table
+\dt                        -- List tables
+\d config_metadata         -- Describe table
 SELECT * FROM config_metadata;
-\q                     -- Quit
+SELECT * FROM audit_log ORDER BY created_at DESC LIMIT 10;
+\q                         -- Quit
 ```
 
 ---
@@ -495,14 +491,12 @@ Open Redis CLI.
 make redis-shell
 ```
 
-**Example commands:**
-
-```redis
-PING                   -- Test connection
-KEYS *                 -- List all keys
-GET mykey              -- Get value
-FLUSHALL               -- Clear all data
-EXIT                   -- Quit
+**Useful commands:**
+```
+PING                       -- Test connection
+KEYS *                     -- List all keys
+KEYS validation:*          -- List validation cache keys
+FLUSHDB                    -- Clear current database
 ```
 
 ---
@@ -515,71 +509,47 @@ List all Kafka topics.
 make kafka-topics
 ```
 
-**Expected topics:**
-
-- `config.updates`
-- `config.health`
-- `config.audit`
+**Expected topics:** `config.events`, `config.updates`, `config.health`, `config.audit`
 
 ---
 
 ### `make kafka-ui`
 
-Open Kafka UI in browser.
+Open Kafka UI in browser at http://localhost:8080.
 
 ```bash
 make kafka-ui
 ```
 
-**Opens:** <http://localhost:8080>
-
-**Features:**
-
-- View topics and messages
-- Monitor consumer groups
-- Manage topics
-
 ---
 
 ### `make grafana`
 
-Open Grafana in browser.
+Open Grafana in browser at http://localhost:3000. Login: admin / admin.
 
 ```bash
 make grafana
 ```
 
-**Opens:** <http://localhost:3000>
-**Login:** admin / admin
-
 ---
 
 ### `make pgadmin`
 
-Open pgAdmin in browser.
+Open pgAdmin in browser at http://localhost:5050. Login: `admin@example.com` / admin.
 
 ```bash
 make pgadmin
 ```
 
-**Opens:** <http://localhost:5050>
-**Login:** `admin@config.local` / admin
-
-**First time setup:**
-
-1. Add server
-2. Host: `postgres`
-3. Database: `configservice`
-4. User: `configuser`
-5. Password: `configpass`
+**First time:** Add server with host `postgres`, database `configservice`, user `configuser`, password `configpass`.
 
 ---
 
-## 🧪 Testing
+## Testing
 
 ### `make test`
 
-Run all tests (placeholder - to be implemented).
+Run all tests.
 
 ```bash
 make test
@@ -587,240 +557,120 @@ make test
 
 ---
 
-### StatsD Metrics Testing
+### `make test-statsd`
 
-Run StatsD metrics test.
+Build and run StatsD metrics test (sends metrics for 10 seconds).
 
 ```bash
 make test-statsd
 ```
 
-**What it tests:**
-
-- StatsD client functionality
-- Metric types (counters, gauges, timings)
-- Network connectivity
-- Prometheus integration
-
 **Check results:**
-
 ```bash
 curl http://localhost:9102/metrics | grep test_
 ```
 
 ---
 
-## 🧹 Cleanup
+## Cleanup
 
 ### `make cleanup`
 
-Complete cleanup - stop all services and remove all data.
+Complete cleanup - stop all services and remove all Docker volumes.
 
 ```bash
 make cleanup
 ```
 
-**⚠️ WARNING:** This removes all Docker volumes (data will be lost!)
-
-**Removes:**
-
-- All containers
-- All volumes (databases, caches)
-- Build artifacts
-
-**Use when:**
-
-- Starting fresh
-- Freeing disk space
-- Resetting to clean state
+**WARNING:** This removes all data (databases, caches, metrics).
 
 ---
 
-## 🎯 Common Workflows
+## Common Workflows
 
 ### First Time Setup
 
 ```bash
-make dev              # Setup everything
-make dev-up           # Start dev container
-make dev-build        # Build project
+make dev                   # Start infrastructure
+make services              # Build and start service containers
+make cli                   # Build CLI
+./bin/konfig list --service test  # Verify
 ```
 
 ### Daily Development
 
 ```bash
-make infra-up         # Start infrastructure
-make dev-up           # Start dev container
-make dev-shell        # Enter container
+make infra-up              # Start infrastructure
+make services              # Build and start containers
+docker compose logs -f api-service  # Watch logs
 
-# Inside container:
-make clean
-make all
-./bin/distribution-service    # Terminal 1
-./bin/simple_client           # Terminal 2
+# After code changes:
+make services              # Rebuilds and restarts
 ```
 
-### Testing StatsD Metrics
+### Local Development (no Docker for services)
 
 ```bash
-make dev-test-statsd          # Run test
-make grafana                  # Open Grafana
-# Create dashboards with metrics
+make infra-up              # Start infrastructure
+make services-local        # Build binaries
+./bin/validation-service config/validation-service.yml &
+./bin/api-service config/api-service-local.yml &
+./bin/konfig upload --service test --file config.json
 ```
 
-### Debugging Services
+### Testing with CLI
 
 ```bash
-make infra-logs               # Watch all logs
-make db-shell                 # Check database
-make redis-shell              # Check cache
-make kafka-topics             # Check messaging
+# Upload
+./bin/konfig upload --service payment-service --file config.json --format json
+
+# Verify
+./bin/konfig list --service payment-service
+./bin/konfig get --id payment-service-v1
+
+# Validate only (no upload)
+./bin/konfig validate --service payment-service --file config.json --format json
+```
+
+### Debugging
+
+```bash
+docker compose logs -f api-service          # Service logs
+make db-shell                               # Check database
+make redis-shell                            # Check cache
+make kafka-topics                           # Check messaging
+docker compose ps                           # Container status
 ```
 
 ### Complete Reset
 
 ```bash
-make cleanup                  # Remove everything
-make dev                      # Start fresh
+make cleanup               # Remove everything
+make dev                   # Start fresh
 ```
 
 ---
 
-## 📊 Access URLs
-
-After running `make verify`, you can access:
+## Access URLs
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| Grafana | <http://localhost:3000> | admin / admin |
-| Prometheus | <http://localhost:9090> | - |
-| Kafka UI | <http://localhost:8080> | - |
-| pgAdmin | <http://localhost:5050> | `admin@example.com` / admin |
-| StatsD Metrics | <http://localhost:9102/metrics> | - |
+| API Service | `localhost:8081` (gRPC) | - |
+| Distribution Service | `localhost:8082` (gRPC) | - |
+| Validation Service | `localhost:8083` (gRPC) | - |
+| Grafana | http://localhost:3000 | admin / admin |
+| Prometheus | http://localhost:9090 | - |
+| Kafka UI | http://localhost:8080 | - |
+| pgAdmin | http://localhost:5050 | `admin@example.com` / admin |
+| StatsD Metrics | http://localhost:9102/metrics | - |
 
----
+## Connection Info
 
-## 🔌 Connection Info
+| Service | From Host | From Container |
+|---------|-----------|----------------|
+| PostgreSQL | `localhost:5432` | `postgres:5432` |
+| Redis | `localhost:6379` | `redis:6379` |
+| Kafka | `localhost:9093` | `kafka:9092` |
+| StatsD | `localhost:9125` | `statsd-exporter:9125` |
 
-### PostgreSQL
-
-```text
-Host: localhost (from host) / postgres (from container)
-Port: 5432
-Database: configservice
-User: configuser
-Password: configpass
-```
-
-### Redis
-
-```text
-Host: localhost (from host) / redis (from container)
-Port: 6379
-```
-
-### Kafka
-
-```text
-Bootstrap servers: localhost:9093 (from host) / kafka:9092 (from container)
-```
-
-### StatsD
-
-```text
-Host: localhost (from host) / statsd-exporter (from container)
-Port: 9125 (UDP)
-```
-
----
-
-## 💡 Tips
-
-### View Make Targets
-
-```bash
-make help
-```
-
-### Check Service Status
-
-```bash
-make infra-ps
-docker ps
-```
-
-### View Logs for Specific Service
-
-```bash
-docker compose logs -f postgres
-docker compose logs -f grafana
-```
-
-### Rebuild Single Service
-
-```bash
-# In dev container
-make clean
-make sdk              # Just SDK
-make services         # Just services
-```
-
-### Run Commands in Dev Container Without Entering
-
-```bash
-make dev-build        # From host
-# or
-docker compose exec dev-container make all
-```
-
----
-
-## 🆘 Troubleshooting
-
-### "No such file or directory"
-
-```bash
-make create-dirs      # Create directory structure
-```
-
-### "Connection refused"
-
-```bash
-make infra-restart    # Restart services
-make verify           # Check health
-```
-
-### "Port already in use"
-
-```bash
-make infra-down       # Stop services
-docker ps             # Check for conflicts
-```
-
-### Build fails
-
-```bash
-make clean            # Clean build
-make dev-build        # Rebuild in container
-```
-
-### Dev container not starting
-
-```bash
-docker compose down
-docker compose build dev-container
-make dev-up
-```
-
----
-
-## 📚 Related Documentation
-
-- [README.md](README.md) - Project overview
-- [Architecture Documentation](docs/ARCHITECTURE.md) - System design
-- [API Documentation](docs/API.md) - Service APIs
-- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
-
----
-
-**Need help?** Run `make help` or check the specific command documentation above!
+**Database credentials:** `configuser` / `configpass` / `configservice`
