@@ -40,12 +40,22 @@ RUN apt-get update && apt-get install -y \
     libyaml-cpp0.7 \
     libspdlog1 \
     libfmt8 \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -r -s /bin/false appuser
 
 WORKDIR /app
 
 COPY --from=builder /build/bin/distribution-service /app/
 
+RUN chown -R appuser:appuser /app
+
+USER appuser
+
 EXPOSE 8082
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD nc -z localhost 8082 || exit 1
 
 CMD ["./distribution-service"]
