@@ -58,6 +58,15 @@ bool ApiServiceImpl::Initialize() {
         // Non-critical, continue
     }
 
+    // Validation client
+    validation_client_ = std::make_unique<ValidationClient>("localhost:8083");
+    if (validation_client_->Initialize()) {
+        std::cout << "[ApiService] ✓ Validation client connected" << std::endl;
+    } else {
+        std::cerr << "[ApiService] ⚠ Validation client init failed - validation disabled"
+                  << std::endl;
+    }
+
     initialized_ = true;
 
     std::cout << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" << std::endl;
@@ -107,6 +116,32 @@ grpc::Status ApiServiceImpl::UploadConfig(grpc::ServerContext* context,
             }
             RecordMetric("upload.validation_failed");
             return grpc::Status::OK;
+        }
+    }
+
+    // Call validation service
+    if (validation_client_) {
+        auto val_response = validation_client_->ValidateConfig(
+            request->service_name(), request->content(), request->format(), false);
+
+        if (!val_response.valid()) {
+            response->set_success(false);
+            response->set_message("Validation service rejected config");
+
+            for (const auto& err : val_response.errors()) {
+                response->add_validation_errors(err.field() + ": " + err.message());
+            }
+
+            RecordMetric("upload.validation_service_failed");
+            return grpc::Status::OK;
+        }
+
+        // Log warnings but proceed
+        if (val_response.warnings_size() > 0) {
+            std::cout << "[ApiService] Validation warnings:" << std::endl;
+            for (const auto& warn : val_response.warnings()) {
+                std::cout << "  - " << warn.field() << ": " << warn.message() << std::endl;
+            }
         }
     }
 
@@ -434,7 +469,8 @@ bool ApiServiceImpl::ValidateContent(const std::string& format, const std::strin
         bool in_string = false;
         bool escaped = false;
 
-        for (char c : content) {
+        for (size_t i = 0; i < content.size(); ++i) {
+            char c = content[i];
             if (escaped) {
                 escaped = false;
                 continue;
@@ -451,6 +487,17 @@ bool ApiServiceImpl::ValidateContent(const std::string& format, const std::strin
                 if (c == '{' || c == '[')
                     depth++;
                 if (c == '}' || c == ']') {
+                    // Check for trailing comma
+                    for (size_t j = i; j > 0; --j) {
+                        char p = content[j - 1];
+                        if (p == ' ' || p == '\t' || p == '\n' || p == '\r')
+                            continue;
+                        if (p == ',') {
+                            errors.push_back("Invalid JSON: trailing comma");
+                            return false;
+                        }
+                        break;
+                    }
                     depth--;
                     if (depth < 0) {
                         errors.push_back("Invalid JSON: unexpected closing bracket");

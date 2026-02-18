@@ -1,7 +1,7 @@
 # Dynamic Configuration Service Makefile
 
 .PHONY: help setup infra-up infra-down infra-restart infra-logs infra-ps \
-        verify cleanup proto distribution-service services sdk test clean install all rebuild \
+        verify cleanup proto distribution-service validation-service services sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
         format format-check \
         example test-statsd \
@@ -53,6 +53,7 @@ help:
 	@echo "$(GREEN)Local Development (Mac/Linux):$(NC)"
 	@echo "  make proto                - Generate protobuf and gRPC code"
 	@echo "  make distribution-service - Build distribution service"
+	@echo "  make validation-service   - Build validation service"
 	@echo "  make services             - Build all C++ services"
 	@echo "  make sdk                  - Build client SDK"
 	@echo "  make all                  - Build everything"
@@ -462,6 +463,12 @@ API_SERVICE_SRCS := $(wildcard $(API_SERVICE_DIR)/*.cpp)
 API_SERVICE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(API_SERVICE_SRCS))
 API_SERVICE_BIN := $(BIN_DIR)/api-service
 
+# Validation Service
+VALIDATION_SERVICE_DIR := $(SRC_DIR)/validation-service
+VALIDATION_SERVICE_SRCS := $(wildcard $(VALIDATION_SERVICE_DIR)/*.cpp)
+VALIDATION_SERVICE_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(VALIDATION_SERVICE_SRCS))
+VALIDATION_SERVICE_BIN := $(BIN_DIR)/validation-service
+
 # --- Distribution Service ---
 
 $(DIST_SERVICE_BIN): $(DIST_SERVICE_OBJS) $(PROTO_OBJS) $(STATSD_OBJ) | $(BIN_DIR)
@@ -493,16 +500,34 @@ $(BUILD_DIR)/api-service/%.o: $(SRC_DIR)/api-service/%.cpp | $(BUILD_DIR)/api-se
 $(BUILD_DIR)/api-service:
 	@mkdir -p $@
 
+# --- Validation Service ---
+
+$(VALIDATION_SERVICE_BIN): $(VALIDATION_SERVICE_OBJS) $(PROTO_OBJS) $(STATSD_OBJ) | $(BIN_DIR)
+	@echo "$(YELLOW)Linking Validation Service...$(NC)"
+	@$(CXX) $(LDFLAGS) $^ $(SERVICE_LIBS) -lyaml-cpp -o $@
+	@echo "$(GREEN)✓ Built $@$(NC)"
+
+$(BUILD_DIR)/validation-service/%.o: $(SRC_DIR)/validation-service/%.cpp | $(BUILD_DIR)/validation-service
+	@echo "$(YELLOW)Compiling $<...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
+
+$(BUILD_DIR)/validation-service:
+	@mkdir -p $@
+
+validation-service: $(VALIDATION_SERVICE_BIN)
+	@echo "$(GREEN)✓ Validation service built$(NC)"
+
 # --- All Services ---
 
-services: $(DIST_SERVICE_BIN) $(API_SERVICE_BIN)
+services: $(DIST_SERVICE_BIN) $(API_SERVICE_BIN) $(VALIDATION_SERVICE_BIN)
 	@echo "$(GREEN)✓ All services built$(NC)"
 
 #==============================================================================
 # BUILD TARGETS
 #==============================================================================
 
-all: proto distribution-service sdk
+all: proto sdk services cli
+	@echo "$(GREEN)✓ All components built$(NC)"
 
 proto: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)
 	@echo "$(GREEN)✓ Proto files generated$(NC)"
