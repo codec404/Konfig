@@ -1,7 +1,7 @@
 # Dynamic Configuration Service Makefile
 
 .PHONY: help setup infra-up infra-down infra-restart infra-logs infra-ps \
-        verify cleanup proto distribution-service validation-service services sdk test clean install all rebuild \
+        verify cleanup proto api-service distribution-service validation-service services services-local services-down sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
         format format-check \
         example test-statsd \
@@ -52,9 +52,11 @@ help:
 	@echo ""
 	@echo "$(GREEN)Local Development (Mac/Linux):$(NC)"
 	@echo "  make proto                - Generate protobuf and gRPC code"
-	@echo "  make distribution-service - Build distribution service"
-	@echo "  make validation-service   - Build validation service"
-	@echo "  make services             - Build all C++ services"
+	@echo "  make distribution-service - Build distribution service locally"
+	@echo "  make validation-service   - Build validation service locally"
+	@echo "  make services             - Build and start all service containers"
+	@echo "  make services-down        - Stop all service containers"
+	@echo "  make services-local       - Build all services locally (no Docker)"
 	@echo "  make sdk                  - Build client SDK"
 	@echo "  make all                  - Build everything"
 	@echo "  make example              - Build example client"
@@ -500,6 +502,9 @@ $(BUILD_DIR)/api-service/%.o: $(SRC_DIR)/api-service/%.cpp | $(BUILD_DIR)/api-se
 $(BUILD_DIR)/api-service:
 	@mkdir -p $@
 
+api-service: $(API_SERVICE_BIN)
+	@echo "$(GREEN)✓ API service built$(NC)"
+
 # --- Validation Service ---
 
 $(VALIDATION_SERVICE_BIN): $(VALIDATION_SERVICE_OBJS) $(PROTO_OBJS) $(STATSD_OBJ) | $(BIN_DIR)
@@ -519,14 +524,27 @@ validation-service: $(VALIDATION_SERVICE_BIN)
 
 # --- All Services ---
 
-services: $(DIST_SERVICE_BIN) $(API_SERVICE_BIN) $(VALIDATION_SERVICE_BIN)
-	@echo "$(GREEN)✓ All services built$(NC)"
+# Build and start all service containers
+services:
+	@echo "$(YELLOW)Building and starting service containers...$(NC)"
+	@docker compose up --build -d api-service distribution-service validation-service
+	@echo "$(GREEN)✓ All service containers started$(NC)"
+
+# Stop service containers
+services-down:
+	@echo "$(YELLOW)Stopping service containers...$(NC)"
+	@docker compose stop api-service distribution-service validation-service
+	@echo "$(GREEN)✓ Service containers stopped$(NC)"
+
+# Build all services locally (no Docker)
+services-local: $(DIST_SERVICE_BIN) $(API_SERVICE_BIN) $(VALIDATION_SERVICE_BIN)
+	@echo "$(GREEN)✓ All services built locally$(NC)"
 
 #==============================================================================
 # BUILD TARGETS
 #==============================================================================
 
-all: proto sdk services cli
+all: proto sdk services-local cli
 	@echo "$(GREEN)✓ All components built$(NC)"
 
 proto: $(PROTO_SRCS) $(PROTO_HDRS) $(GRPC_SRCS) $(GRPC_HDRS)

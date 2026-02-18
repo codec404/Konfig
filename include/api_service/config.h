@@ -37,12 +37,17 @@ struct ServerConfig {
     int max_connections = 1000;
 };
 
+struct ValidationServiceConfig {
+    std::string address = "validation-service:8083";
+};
+
 struct ServiceConfig {
     ServerConfig server;
     PostgresConfig postgres;
     KafkaConfig kafka;
     RedisConfig redis;
     StatsDConfig statsd;
+    ValidationServiceConfig validation;
 
     static ServiceConfig LoadFromFile(const std::string& path);
     static ServiceConfig LoadDefaults();
