@@ -44,7 +44,7 @@ std::string DiskCache::GetCachePath(const std::string& service_name) const {
 }
 
 bool DiskCache::Exists(const std::string& service_name) const {
-    struct stat st{};
+    struct stat st = {};
     return stat(GetCachePath(service_name).c_str(), &st) == 0;
 }
 
@@ -122,7 +122,7 @@ bool DiskCache::Load(const std::string& service_name, ConfigData& out) {
 // ---------------------------------------------------------------------------
 
 bool DiskCache::EnsureCacheDir() const {
-    struct stat st{};
+    struct stat st = {};
     if (stat(cache_dir_.c_str(), &st) == 0) {
         return S_ISDIR(st.st_mode);
     }
@@ -132,7 +132,7 @@ bool DiskCache::EnsureCacheDir() const {
     for (size_t i = 0; i <= cache_dir_.size(); ++i) {
         if (i == cache_dir_.size() || cache_dir_[i] == '/') {
             if (!path.empty()) {
-                struct stat s{};
+                struct stat s = {};
                 if (stat(path.c_str(), &s) != 0) {
 #ifdef _WIN32
                     if (mkdir(path.c_str()) != 0)
