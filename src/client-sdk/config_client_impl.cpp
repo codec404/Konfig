@@ -6,12 +6,16 @@
 namespace configservice {
 
 ConfigClientImpl::ConfigClientImpl(const std::string& server_address,
-                                   const std::string& service_name, const std::string& instance_id)
+                                   const std::string& service_name, const std::string& instance_id,
+                                   const std::string& cache_dir)
     : server_address_(server_address), service_name_(service_name), instance_id_(instance_id),
       current_version_(0), running_(false), connected_(false) {
     // Create gRPC channel
     channel_ = grpc::CreateChannel(server_address_, grpc::InsecureChannelCredentials());
     stub_ = DistributionService::NewStub(channel_);
+
+    // Initialise disk cache
+    disk_cache_ = std::make_unique<DiskCache>(cache_dir);
 
     std::cout << "[ConfigClient] Created client for service: " << service_name_
               << " (instance: " << instance_id_ << ")" << std::endl;
@@ -28,6 +32,16 @@ bool ConfigClientImpl::Start() {
 
     std::cout << "[ConfigClient] Starting client..." << std::endl;
     running_ = true;
+
+    // Load cached config from disk before connecting — gives app an immediate value
+    {
+        ConfigData cached;
+        if (disk_cache_->Load(service_name_, cached)) {
+            std::lock_guard<std::mutex> lock(config_mutex_);
+            current_config_ = cached;
+            current_version_ = cached.version();
+        }
+    }
 
     // Start stream thread
     stream_thread_ = std::make_unique<std::thread>(&ConfigClientImpl::StreamLoop, this);
@@ -161,6 +175,9 @@ void ConfigClientImpl::HandleConfigUpdate(const ConfigUpdate& update) {
         current_config_ = config;
         current_version_ = config.version();
     }
+
+    // Persist to disk cache
+    disk_cache_->Save(config);
 
     // Trigger callback
     {
