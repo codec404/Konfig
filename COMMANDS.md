@@ -10,6 +10,7 @@ Quick reference for all available `make` commands.
 - [Service Containers](#service-containers)
 - [Build Commands](#build-commands)
 - [CLI Tool](#cli-tool)
+- [Client SDK & Disk Cache](#client-sdk--disk-cache)
 - [Development Container](#development-container)
 - [Database & Tools](#database--tools)
 - [Testing](#testing)
@@ -270,6 +271,38 @@ make cli
 
 ---
 
+### `make sdk`
+
+Build the client SDK (shared and static libraries).
+
+> Already documented above — see the [`make sdk`](#make-sdk) entry.
+
+---
+
+### `make cache-test`
+
+Build the disk cache test binary.
+
+```bash
+make cache-test
+```
+
+**Output:** `bin/cache_test`
+
+**Usage (host machine):**
+```bash
+./bin/cache_test localhost:8082 payment-service
+```
+
+**Usage (inside dev container):**
+```bash
+./bin/cache_test distribution-service:8082 payment-service
+```
+
+See [Client SDK & Disk Cache](#client-sdk--disk-cache) for the full test walkthrough.
+
+---
+
 ### `make example`
 
 Build the example client application.
@@ -384,6 +417,68 @@ The `konfig` CLI communicates with the API Service via gRPC.
 
 ---
 
+## Client SDK & Disk Cache
+
+The C++ SDK (`libconfigclient`) provides automatic reconnection and disk-backed config caching for client services.
+
+### Build
+
+```bash
+# On host machine (macOS/Linux)
+make clean && make proto && make sdk && make cache-test
+
+# Inside dev container
+make dev-sdk && make dev-cache-test
+```
+
+### Disk cache test sequence
+
+```bash
+# Step 1 — first run, no cache
+./bin/cache_test distribution-service:8082 payment-service
+# [CacheTest] Cache file exists  : NO  (first run)
+# [Status] Connected to distribution service
+
+# Step 2 — upload a config so the cache gets seeded
+./bin/konfig upload --service payment-service --file examples/configs/valid-config.json --format json
+# cache_test prints:
+# >>> CONFIG UPDATE <<<
+#   version : 1
+# [DiskCache] Saved config v1 for payment-service -> ~/.konfig/cache/payment-service.cache
+
+# Step 3 — restart: cache loads before gRPC stream opens
+./bin/cache_test distribution-service:8082 payment-service
+# [CacheTest] Cache readable     : YES  (v1)
+# >>> CONFIG UPDATE <<<   ← from disk
+# [Status] Connected to distribution service   ← then live
+
+# Step 4 — offline fallback (stop services first)
+make services-down
+./bin/cache_test distribution-service:8082 payment-service
+# [CacheTest] Cache readable     : YES  (v1)
+# >>> CONFIG UPDATE <<<   ← served from disk
+# [Status] Disconnected from distribution service
+# [ConfigClient] Reconnecting in 5 seconds...
+
+# Step 5 — corrupt cache is discarded
+echo "garbage" > ~/.konfig/cache/payment-service.cache
+./bin/cache_test distribution-service:8082 payment-service
+# [CacheTest] Cache readable     : NO  (corrupt — will be discarded)
+# [DiskCache] Parse failed ... — discarding
+# [Status] Connected to distribution service   ← falls back to live
+```
+
+> **Hostname note:** Use `distribution-service:8082` from inside the dev container; use `localhost:8082` when running on the host machine.
+
+### Cache location
+
+```bash
+ls -lh ~/.konfig/cache/
+# payment-service.cache
+```
+
+---
+
 ## Development Container
 
 The dev container provides a Linux build environment with all C++ dependencies pre-installed.
@@ -430,14 +525,15 @@ make dev-build
 
 ---
 
-### `make dev-proto` / `make dev-sdk` / `make dev-example`
+### `make dev-proto` / `make dev-sdk` / `make dev-example` / `make dev-cache-test`
 
 Build individual components inside the dev container.
 
 ```bash
-make dev-proto
-make dev-sdk
-make dev-example
+make dev-proto          # Generate proto files
+make dev-sdk            # Build client SDK libraries
+make dev-example        # Build bin/simple_client
+make dev-cache-test     # Build bin/cache_test
 ```
 
 ---
@@ -641,6 +737,19 @@ make redis-shell                            # Check cache
 make kafka-topics                           # Check messaging
 docker compose ps                           # Container status
 ```
+
+### Testing the Client SDK Disk Cache
+
+```bash
+# Build SDK + test binary inside dev container
+make dev-sdk && make dev-cache-test
+
+# Run with services up (inside dev container shell)
+make dev-shell
+./bin/cache_test distribution-service:8082 payment-service
+```
+
+See [Client SDK & Disk Cache](#client-sdk--disk-cache) for the full 5-step test sequence.
 
 ### Complete Reset
 

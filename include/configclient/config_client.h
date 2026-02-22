@@ -43,11 +43,12 @@ class ConfigClient {
      * @brief Construct a new Config Client
      *
      * @param server_address Distribution service address (e.g., "localhost:8082")
-     * @param service_name Name of this service
-     * @param instance_id Unique instance identifier (auto-generated if empty)
+     * @param service_name   Name of this service
+     * @param instance_id    Unique instance identifier (auto-generated if empty)
+     * @param cache_dir      Directory for disk cache (default: ~/.konfig/cache/)
      */
     ConfigClient(const std::string& server_address, const std::string& service_name,
-                 const std::string& instance_id = "");
+                 const std::string& instance_id = "", const std::string& cache_dir = "");
 
     ~ConfigClient();
 

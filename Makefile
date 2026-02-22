@@ -4,9 +4,9 @@
         verify cleanup proto api-service distribution-service validation-service services services-local services-down sdk test clean install all rebuild \
         db-shell redis-shell kafka-topics kafka-ui grafana pgadmin wait-for-services dev \
         format format-check \
-        example test-statsd \
-        proto-native sdk-native example-native all-native \
-        dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-clean dev-test-statsd \
+        example cache-test test-statsd \
+        proto-native sdk-native example-native cache-test-native all-native \
+        dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-cache-test dev-clean dev-test-statsd \
         cli cli-build cli-install cli-clean
 
 # Colors
@@ -46,6 +46,7 @@ help:
 	@echo "  make dev-proto       - Generate proto files in dev container"
 	@echo "  make dev-sdk         - Build SDK in dev container"
 	@echo "  make dev-example     - Build example in dev container"
+	@echo "  make dev-cache-test  - Build cache test binary in dev container"
 	@echo "  make dev-test-statsd - Test StatsD in dev container"
 	@echo "  make dev-clean       - Clean build artifacts in dev container"
 	@echo "  make dev-down        - Stop development container"
@@ -348,6 +349,11 @@ dev-example:
 	@$(COMPOSE) exec dev-container make example-native
 	@echo "$(GREEN)✓ Example built$(NC)"
 
+dev-cache-test:
+	@echo "$(YELLOW)Building cache test in development container...$(NC)"
+	@$(COMPOSE) exec dev-container make cache-test-native
+	@echo "$(GREEN)✓ Cache test binary built$(NC)"
+
 dev-clean:
 	@echo "$(YELLOW)Cleaning in development container...$(NC)"
 	@$(COMPOSE) exec dev-container make clean
@@ -366,8 +372,11 @@ UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
     # macOS
     CXX := clang++
-    INCLUDES_BASE := -I/opt/homebrew/include -I/usr/local/include -I/opt/homebrew/opt/libpq/include
-    LDFLAGS_BASE := -L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/libpq/lib
+    OPENSSL_PREFIX := $(shell brew --prefix openssl 2>/dev/null || echo "/opt/homebrew/opt/openssl@3")
+    INCLUDES_BASE := -I/opt/homebrew/include -I/usr/local/include -I/opt/homebrew/opt/libpq/include \
+                     -I$(OPENSSL_PREFIX)/include
+    LDFLAGS_BASE := -L/opt/homebrew/lib -L/usr/local/lib -L/opt/homebrew/opt/libpq/lib \
+                    -L$(OPENSSL_PREFIX)/lib
 else
     # Linux (Docker)
     CXX := g++
@@ -392,7 +401,7 @@ PROTO_LIBS := $(shell pkg-config --libs protobuf grpc++ 2>/dev/null || echo "-lp
 INCLUDES := -I$(INCLUDE_DIR) -I$(BUILD_DIR) $(PROTO_CFLAGS) $(INCLUDES_BASE)
 
 # Minimal libs for SDK (only protobuf and grpc)
-SDK_LIBS := $(PROTO_LIBS) -lgrpc++_reflection
+SDK_LIBS := $(PROTO_LIBS) -lgrpc++_reflection -lssl -lcrypto
 
 # Full libs for services
 SERVICE_LIBS := $(SDK_LIBS) -lpqxx -lpq -lhiredis -lrdkafka++ \
@@ -613,10 +622,17 @@ $(BIN_DIR)/statsd_test: examples/statsd_test.cpp $(STATSD_OBJ) | $(BIN_DIR)
 
 $(BIN_DIR)/simple_client: examples/simple_client.cpp $(SDK_STATIC) | $(BIN_DIR)
 	@echo "$(YELLOW)Building example client...$(NC)"
-	@$(CXX) $(CXXFLAGS) $(INCLUDES) $< $(SDK_STATIC) $(SDK_LIBS) -o $@
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) $< $(SDK_STATIC) $(SDK_LIBS) -o $@
+	@echo "$(GREEN)✓ Built $@$(NC)"
+
+$(BIN_DIR)/cache_test: examples/cache_test.cpp $(SDK_STATIC) | $(BIN_DIR)
+	@echo "$(YELLOW)Building cache test binary...$(NC)"
+	@$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) $< $(SDK_STATIC) $(SDK_LIBS) -o $@
 	@echo "$(GREEN)✓ Built $@$(NC)"
 
 example: $(BIN_DIR)/simple_client
+
+cache-test: $(BIN_DIR)/cache_test
 
 test-statsd: $(BIN_DIR)/statsd_test
 	@echo "$(YELLOW)Running StatsD test...$(NC)"
@@ -646,6 +662,9 @@ sdk-native: proto-native $(SDK_SHARED) $(SDK_STATIC)
 
 example-native: $(BIN_DIR)/simple_client
 	@echo "$(GREEN)✓ Example client built$(NC)"
+
+cache-test-native: $(BIN_DIR)/cache_test
+	@echo "$(GREEN)✓ Cache test binary built$(NC)"
 
 all-native: proto-native sdk-native
 	@echo "$(GREEN)✓ All components built$(NC)"

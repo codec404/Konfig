@@ -139,6 +139,7 @@ make api-service       # Build API service locally
 make distribution-service  # Build distribution service locally
 make validation-service    # Build validation service locally
 make sdk               # Build client SDK (shared + static)
+make cache-test        # Build disk cache test binary (bin/cache_test)
 make cli               # Build CLI tool (bin/konfig)
 make all               # Build everything locally
 make clean             # Remove build artifacts
@@ -236,7 +237,79 @@ make services
 make dev-up            # Start dev container
 make dev-shell         # Enter interactive shell
 make dev-build         # Build inside container
+make dev-sdk           # Build client SDK inside container
+make dev-cache-test    # Build disk cache test binary inside container
 ```
+
+## Client SDK
+
+The C++ client SDK (`libconfigclient`) lets services subscribe to real-time config updates with automatic reconnection and disk caching.
+
+```cpp
+#include "configclient/config_client.h"
+
+configservice::ConfigClient client("distribution-service:8082", "payment-service");
+
+client.OnConfigUpdate([](const configservice::ConfigData& config) {
+    // called immediately from disk cache on startup, then on every live update
+    std::cout << "Config v" << config.version() << ": " << config.content() << std::endl;
+});
+
+client.Start();   // loads disk cache, then connects
+// ...
+client.Stop();
+```
+
+### Disk Cache
+
+On every update the SDK writes a binary cache to `~/.konfig/cache/<service>.cache`. On the next startup the cached config is served **before** the gRPC connection is established — so services have a valid config immediately, even when the distribution service is temporarily unreachable.
+
+| Scenario | Behaviour |
+|----------|-----------|
+| First start, server up | No cache — waits for live stream |
+| Restart, server up | Serves cache immediately, updates live |
+| Restart, server down | Serves cache, retries every 5 s |
+| Corrupted cache | Discards file, falls back to live config |
+
+### Testing the disk cache (`bin/cache_test`)
+
+```bash
+# Build (inside dev container)
+make dev-sdk && make dev-cache-test
+
+# Step 1 — first run (no cache)
+./bin/cache_test distribution-service:8082 payment-service
+
+# Step 2 — upload a config (separate terminal)
+./bin/konfig upload --service payment-service --file examples/configs/valid-config.json --format json
+# cache_test prints: >>> CONFIG UPDATE <<<  and [DiskCache] Saved config v1 ...
+
+# Step 3 — restart: cache loads before gRPC connects
+./bin/cache_test distribution-service:8082 payment-service
+# prints: Cache readable: YES (v1)  then  >>> CONFIG UPDATE <<<  then  Connected
+
+# Step 4 — offline fallback
+make services-down
+./bin/cache_test distribution-service:8082 payment-service
+# prints: Cache readable: YES (v1)  then  Disconnected / Reconnecting in 5 seconds...
+
+# Step 5 — corruption: bad cache is discarded
+echo "garbage" > ~/.konfig/cache/payment-service.cache
+./bin/cache_test distribution-service:8082 payment-service
+# prints: Cache readable: NO (corrupt — will be discarded)  then  Connected
+```
+
+> **Note on hostnames:** Use `distribution-service:8082` from inside the dev container. Use `localhost:8082` when running the binary directly on the host machine.
+
+### Linking against the SDK
+
+```makefile
+# Static link
+$(CXX) $(CXXFLAGS) $(INCLUDES) $(LDFLAGS) my_service.cpp \
+    lib/libconfigclient.a $(SDK_LIBS) -o bin/my_service
+```
+
+Headers are in `include/configclient/`. Libraries are in `lib/` after `make sdk`.
 
 ## Connection Info
 

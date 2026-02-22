@@ -1,6 +1,7 @@
 #pragma once
 
 #include "config_client.h"
+#include "configclient/disk_cache.h"
 
 #include <grpcpp/grpcpp.h>
 
@@ -18,7 +19,7 @@ namespace configservice {
 class ConfigClientImpl {
    public:
     ConfigClientImpl(const std::string& server_address, const std::string& service_name,
-                     const std::string& instance_id);
+                     const std::string& instance_id, const std::string& cache_dir = "");
 
     ~ConfigClientImpl();
 
@@ -50,6 +51,9 @@ class ConfigClientImpl {
     std::unique_ptr<DistributionService::Stub> stub_;
     std::unique_ptr<grpc::ClientContext> context_;
     std::unique_ptr<grpc::ClientReaderWriter<SubscribeRequest, ConfigUpdate>> stream_;
+
+    // Disk cache
+    std::unique_ptr<DiskCache> disk_cache_;
 
     // Current config
     mutable std::mutex config_mutex_;
