@@ -286,6 +286,11 @@ bool DistributionServiceImpl::SendConfigToClient(std::shared_ptr<ClientInfo> cli
         return false;
     }
 
+    // Fail fast if the stream is already known to be dead.
+    if (client->context && client->context->IsCancelled()) {
+        return false;
+    }
+
     ConfigUpdate update;
     *update.mutable_config() = config;
     update.set_update_type(NEW_CONFIG);
@@ -303,6 +308,11 @@ bool DistributionServiceImpl::SendConfigToClient(std::shared_ptr<ClientInfo> cli
         }
 
         return true;
+    }
+
+    // Write failed — cancel the context so future calls on this stream fail instantly.
+    if (client->context) {
+        client->context->TryCancel();
     }
 
     if (metrics_) {
@@ -498,7 +508,11 @@ void DistributionServiceImpl::RolloutConsumerLoop() {
                     std::string config_id = service_name + "-v" + std::to_string(version);
                     std::cout << "[DistributionService] Rollout event received: " << event_type
                               << " config=" << config_id << std::endl;
-                    ExecuteRollout(service_name, config_id);
+                    // Run in a detached thread so the consumer loop is never blocked
+                    // by a slow rollout (e.g. dead clients, slow DB writes).
+                    std::thread([this, service_name, config_id]() {
+                        ExecuteRollout(service_name, config_id);
+                    }).detach();
                 }
             }
         } else if (msg->err() != RdKafka::ERR__TIMED_OUT &&
