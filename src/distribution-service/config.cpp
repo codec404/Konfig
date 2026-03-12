@@ -58,13 +58,16 @@ ServiceConfig ServiceConfig::LoadFromFile(const std::string& config_file) {
             config.statsd.prefix = statsd["prefix"].as<std::string>("distribution");
         }
 
-        // Monitoring
+        // Monitoring — parse "30s" / "90s" duration strings
         if (yaml["monitoring"]) {
             auto mon = yaml["monitoring"];
+            auto parse_seconds = [](const std::string& s) -> int {
+                return std::stoi(s);  // stoi stops at the first non-digit ('s')
+            };
             config.monitoring.heartbeat_interval_seconds =
-                mon["heartbeat_interval"].as<std::string>("30s")[0] - '0';
+                parse_seconds(mon["heartbeat_interval"].as<std::string>("30s"));
             config.monitoring.heartbeat_timeout_seconds =
-                mon["heartbeat_timeout"].as<std::string>("90s")[0] - '0';
+                parse_seconds(mon["heartbeat_timeout"].as<std::string>("90s"));
         }
 
         // Logging

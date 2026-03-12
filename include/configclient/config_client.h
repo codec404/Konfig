@@ -42,13 +42,16 @@ class ConfigClient {
     /**
      * @brief Construct a new Config Client
      *
-     * @param server_address Distribution service address (e.g., "localhost:8082")
-     * @param service_name   Name of this service
-     * @param instance_id    Unique instance identifier (auto-generated if empty)
-     * @param cache_dir      Directory for disk cache (default: ~/.konfig/cache/)
+     * @param server_address             Distribution service address (e.g., "localhost:8082")
+     * @param service_name               Name of this service
+     * @param instance_id                Unique instance identifier (auto-generated if empty)
+     * @param cache_dir                  Directory for disk cache (default: ~/.konfig/cache/)
+     * @param heartbeat_interval_seconds How often to send heartbeats (default: 30s)
+     * @param max_heartbeat_failures     Consecutive failures before reconnecting (default: 3)
      */
     ConfigClient(const std::string& server_address, const std::string& service_name,
-                 const std::string& instance_id = "", const std::string& cache_dir = "");
+                 const std::string& instance_id = "", const std::string& cache_dir = "",
+                 int heartbeat_interval_seconds = 30, int max_heartbeat_failures = 3);
 
     ~ConfigClient();
 

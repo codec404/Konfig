@@ -19,7 +19,8 @@ namespace configservice {
 class ConfigClientImpl {
    public:
     ConfigClientImpl(const std::string& server_address, const std::string& service_name,
-                     const std::string& instance_id, const std::string& cache_dir = "");
+                     const std::string& instance_id, const std::string& cache_dir = "",
+                     int heartbeat_interval_seconds = 30, int max_heartbeat_failures = 3);
 
     ~ConfigClientImpl();
 
@@ -39,6 +40,7 @@ class ConfigClientImpl {
    private:
     void StreamLoop();
     void ConnectAndSubscribe();
+    void HeartbeatLoop();
     void HandleConfigUpdate(const ConfigUpdate& update);
     void SetConnectionStatus(bool connected);
 
@@ -72,6 +74,12 @@ class ConfigClientImpl {
 
     std::mutex shutdown_mutex_;
     std::condition_variable shutdown_cv_;
+
+    std::unique_ptr<std::thread> heartbeat_thread_;
+    std::mutex heartbeat_mutex_;
+    std::condition_variable heartbeat_cv_;
+    int heartbeat_interval_seconds_;
+    int max_heartbeat_failures_;
 
     static constexpr int kReconnectDelaySeconds = 5;
 };

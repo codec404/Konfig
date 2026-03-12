@@ -7,9 +7,12 @@ namespace configservice {
 
 ConfigClientImpl::ConfigClientImpl(const std::string& server_address,
                                    const std::string& service_name, const std::string& instance_id,
-                                   const std::string& cache_dir)
+                                   const std::string& cache_dir, int heartbeat_interval_seconds,
+                                   int max_heartbeat_failures)
     : server_address_(server_address), service_name_(service_name), instance_id_(instance_id),
-      current_version_(0), running_(false), connected_(false) {
+      current_version_(0), running_(false), connected_(false),
+      heartbeat_interval_seconds_(heartbeat_interval_seconds),
+      max_heartbeat_failures_(max_heartbeat_failures) {
     // Create gRPC channel
     channel_ = grpc::CreateChannel(server_address_, grpc::InsecureChannelCredentials());
     stub_ = DistributionService::NewStub(channel_);
@@ -46,6 +49,9 @@ bool ConfigClientImpl::Start() {
     // Start stream thread
     stream_thread_ = std::make_unique<std::thread>(&ConfigClientImpl::StreamLoop, this);
 
+    // Start heartbeat thread
+    heartbeat_thread_ = std::make_unique<std::thread>(&ConfigClientImpl::HeartbeatLoop, this);
+
     return true;
 }
 
@@ -62,12 +68,16 @@ void ConfigClientImpl::Stop() {
         context_->TryCancel();
     }
 
-    // Wake up thread
+    // Wake up threads
     shutdown_cv_.notify_all();
+    heartbeat_cv_.notify_all();
 
-    // Wait for thread
+    // Wait for threads
     if (stream_thread_ && stream_thread_->joinable()) {
         stream_thread_->join();
+    }
+    if (heartbeat_thread_ && heartbeat_thread_->joinable()) {
+        heartbeat_thread_->join();
     }
 
     SetConnectionStatus(false);
@@ -113,6 +123,50 @@ void ConfigClientImpl::StreamLoop() {
 
             std::unique_lock<std::mutex> lock(shutdown_mutex_);
             shutdown_cv_.wait_for(lock, std::chrono::seconds(kReconnectDelaySeconds));
+        }
+    }
+}
+
+void ConfigClientImpl::HeartbeatLoop() {
+    int consecutive_failures = 0;
+
+    while (running_) {
+        // Wait for the heartbeat interval (or until stopped)
+        {
+            std::unique_lock<std::mutex> lock(heartbeat_mutex_);
+            heartbeat_cv_.wait_for(lock, std::chrono::seconds(heartbeat_interval_seconds_),
+                                   [this] { return !running_.load(); });
+        }
+
+        if (!running_)
+            break;
+
+        // Only send heartbeats when connected
+        if (!connected_) {
+            consecutive_failures = 0;
+            continue;
+        }
+
+        SubscribeRequest heartbeat;
+        heartbeat.set_service_name(service_name_);
+        heartbeat.set_instance_id(instance_id_);
+        heartbeat.set_current_version(GetCurrentVersion());
+
+        if (stream_ && stream_->Write(heartbeat)) {
+            consecutive_failures = 0;
+        } else {
+            consecutive_failures++;
+            std::cerr << "[ConfigClient] Heartbeat failed (" << consecutive_failures << "/"
+                      << max_heartbeat_failures_ << ")" << std::endl;
+
+            if (consecutive_failures >= max_heartbeat_failures_) {
+                std::cerr << "[ConfigClient] Max heartbeat failures reached, reconnecting..."
+                          << std::endl;
+                consecutive_failures = 0;
+                if (context_) {
+                    context_->TryCancel();
+                }
+            }
         }
     }
 }
