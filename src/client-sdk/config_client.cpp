@@ -22,11 +22,13 @@ std::string GenerateInstanceId() {
 }  // anonymous namespace
 
 ConfigClient::ConfigClient(const std::string& server_address, const std::string& service_name,
-                           const std::string& instance_id, const std::string& cache_dir)
+                           const std::string& instance_id, const std::string& cache_dir,
+                           int heartbeat_interval_seconds, int max_heartbeat_failures)
     : server_address_(server_address), service_name_(service_name),
       instance_id_(instance_id.empty() ? GenerateInstanceId() : instance_id) {
     impl_ =
-        std::make_unique<ConfigClientImpl>(server_address_, service_name_, instance_id_, cache_dir);
+        std::make_unique<ConfigClientImpl>(server_address_, service_name_, instance_id_, cache_dir,
+                                           heartbeat_interval_seconds, max_heartbeat_failures);
 }
 
 ConfigClient::~ConfigClient() {

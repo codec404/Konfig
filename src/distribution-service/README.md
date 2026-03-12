@@ -9,12 +9,12 @@ The Distribution Service acts as the push mechanism in the configuration managem
 ### Key Features
 
 - Real-time bidirectional gRPC streaming for instant config delivery
+- Rollout strategy execution: `ALL_AT_ONCE`, `CANARY`, `PERCENTAGE`
+- Kafka consumer for rollout events (with DB polling as an idempotent catch-up)
 - Redis-based caching to reduce database load
-- Client health monitoring with heartbeat mechanism
-- Kafka event publishing for lifecycle events
-- StatsD metrics for monitoring
-- Audit logging for all config deliveries
-- Graceful client disconnection handling
+- Heartbeat monitor evicts timed-out clients and cancels their streams
+- Version ordering: clients are never downgraded to an older config
+- StatsD metrics, audit logging, and graceful disconnection handling
 
 ## gRPC API
 
@@ -84,14 +84,34 @@ Defined in `proto/distribution.proto` as `DistributionService`:
    → client_disconnect event published to Kafka
 ```
 
+## Rollout Execution
+
+Rollouts are triggered in two ways:
+
+1. **Kafka event** — The API service publishes a `config.rollout_started` event after `StartRollout`. The distribution service consumes this immediately and begins pushing configs to the appropriate set of instances.
+2. **DB polling** — Every 30 seconds, the service polls `rollout_state` for any `IN_PROGRESS` or `PENDING` rollouts. This handles the Kafka consumer rebalance window (2–3 s gap at startup) and acts as an idempotent catch-up mechanism.
+
+### Version Ordering
+
+When pushing a config to a client, the distribution service skips any client whose `current_version` is already equal to or greater than the rollout version. This prevents clients from being downgraded when a periodic poll re-executes an older rollout.
+
+### Rollout Strategies
+
+| Strategy | Behaviour |
+|----------|-----------|
+| `ALL_AT_ONCE` | Pushed to all connected instances. Completed when all instances receive the config (or no instances are connected). |
+| `CANARY` | Pushed to ~10% of instances. Stays `IN_PROGRESS` until `configctl promote` is called. If no clients are connected, stays `IN_PROGRESS` (does not auto-complete). |
+| `PERCENTAGE` | Pushed to the specified fraction of instances. Completed when the target percentage is reached. |
+
 ## Components
 
 ### `distribution_service.cpp`
 
 Core gRPC service:
-- `Subscribe()` - Bidirectional streaming, config delivery, heartbeat monitoring
-- `ReportHealth()` - Processes health reports for rollout decisions
-- `Heartbeat()` - Connection keepalive with timeout detection (90s)
+- `Subscribe()` — Bidirectional streaming. Registers the client, sends the latest rolled-out config, then reads heartbeats
+- `ExecuteRollout()` — Pushes a config to the appropriate subset of instances based on strategy
+- `PollPendingRollouts()` — DB catch-up: re-runs any open rollouts on startup and every 30 s
+- `HeartbeatMonitorLoop()` — Evicts clients that have not sent a heartbeat within the timeout, cancels their stream context
 
 ### `database_manager.cpp`
 
@@ -255,7 +275,8 @@ include/distribution_service/
 ## Related
 
 - [Proto Definition](../../proto/distribution.proto)
-- [Client SDK](../client-sdk/)
+- [Client SDK](../client-sdk/README.md)
 - [Database Schema](../../db/migrations/)
 - [API Service](../api-service/README.md)
 - [Commands Reference](../../COMMANDS.md)
+- [CLI Reference](../../cmd/configctl/README.md)

@@ -36,6 +36,8 @@ Push configuration changes to thousands of services in seconds.`,
 	rootCmd.AddCommand(commands.NewListCommand())
 	rootCmd.AddCommand(commands.NewDeleteCommand())
 	rootCmd.AddCommand(commands.NewValidateCommand())
+	rootCmd.AddCommand(commands.NewRolloutCommand())
+	rootCmd.AddCommand(commands.NewPromoteCommand())
 	rootCmd.AddCommand(commands.NewRollbackCommand())
 	rootCmd.AddCommand(commands.NewStatusCommand())
 	rootCmd.AddCommand(commands.NewVersionCommand())

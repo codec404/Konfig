@@ -542,7 +542,13 @@ bool ApiServiceImpl::PublishEvent(const std::string& event_type, const std::stri
         return false;
     }
 
-    kafka_producer_->poll(0);
+    // poll(0) triggers internal send; for rollout/rollback events flush immediately
+    // so the distribution service receives them with minimal delay
+    if (event_type == "config.rollout_started" || event_type == "config.rolled_back") {
+        kafka_producer_->flush(100 /*ms*/);
+    } else {
+        kafka_producer_->poll(0);
+    }
     return true;
 }
 

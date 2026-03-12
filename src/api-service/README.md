@@ -178,4 +178,4 @@ include/api_service/
 - [Database Schema](../../db/migrations/)
 - [Validation Service](../validation-service/README.md)
 - [CLI Tool](../../cmd/configctl/)
-- [Commands Reference](../../COMMANDS.md)
+- [CLI Reference](../../cmd/configctl/README.md)
