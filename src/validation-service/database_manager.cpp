@@ -69,10 +69,10 @@ std::pair<bool, std::string> DatabaseManager::RegisterSchema(
         txn.exec_params("INSERT INTO validation_schemas "
                         "  (schema_id, service_name, schema_type, schema_content, "
                         "   description, created_by, created_at, is_active) "
-                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8) "
+                        "VALUES ($1, $2, $3, $4, $5, $6, TO_TIMESTAMP($7), $8) "
                         "ON CONFLICT (schema_id) DO UPDATE "
                         "SET schema_content = $4, description = $5, "
-                        "    updated_at = $7, is_active = $8",
+                        "    updated_at = TO_TIMESTAMP($7), is_active = $8",
                         schema.schema_id(), schema.service_name(), schema.schema_type(),
                         schema.schema_content(), schema.description(), schema.created_by(),
                         schema.created_at(), schema.is_active());
@@ -101,7 +101,8 @@ configservice::ValidationSchema DatabaseManager::GetSchema(const std::string& sc
             txn.exec_params("SELECT schema_id, service_name, schema_type, schema_content, "
                             "       COALESCE(description, '') as description, "
                             "       COALESCE(created_by, '') as created_by, "
-                            "       created_at, is_active "
+                            "       EXTRACT(EPOCH FROM created_at)::bigint as created_at, "
+                            "       is_active "
                             "FROM validation_schemas "
                             "WHERE schema_id = $1",
                             schema_id);
@@ -146,7 +147,8 @@ std::vector<configservice::ValidationSchema> DatabaseManager::ListSchemas(
             r = txn.exec_params("SELECT schema_id, service_name, schema_type, schema_content, "
                                 "       COALESCE(description, '') as description, "
                                 "       COALESCE(created_by, '') as created_by, "
-                                "       created_at, is_active "
+                                "       EXTRACT(EPOCH FROM created_at)::bigint as created_at, "
+                                "       is_active "
                                 "FROM validation_schemas "
                                 "ORDER BY created_at DESC "
                                 "LIMIT $1 OFFSET $2",
@@ -157,7 +159,8 @@ std::vector<configservice::ValidationSchema> DatabaseManager::ListSchemas(
             r = txn.exec_params("SELECT schema_id, service_name, schema_type, schema_content, "
                                 "       COALESCE(description, '') as description, "
                                 "       COALESCE(created_by, '') as created_by, "
-                                "       created_at, is_active "
+                                "       EXTRACT(EPOCH FROM created_at)::bigint as created_at, "
+                                "       is_active "
                                 "FROM validation_schemas "
                                 "WHERE service_name = $1 "
                                 "ORDER BY created_at DESC "

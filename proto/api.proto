@@ -28,6 +28,21 @@ service ConfigAPIService {
     
     // Rollback to previous version
     rpc Rollback(RollbackRequest) returns (RollbackResponse);
+
+    // Promote a canary/percentage rollout to a higher target percentage
+    rpc PromoteRollout(PromoteRolloutRequest) returns (PromoteRolloutResponse);
+
+    // Get audit log entries
+    rpc GetAuditLog(GetAuditLogRequest) returns (GetAuditLogResponse);
+
+    // Get system-wide stats
+    rpc GetStats(GetStatsRequest) returns (GetStatsResponse);
+
+    // List all services that have configs
+    rpc ListServices(ListServicesRequest) returns (ListServicesResponse);
+
+    // List rollouts with optional status filter
+    rpc ListRollouts(ListRolloutsRequest) returns (ListRolloutsResponse);
 }
 
 // Upload config request
@@ -116,4 +131,92 @@ message RollbackResponse {
     bool success = 1;
     string message = 2;
     string config_id = 3;
+}
+
+// Promote rollout request
+message PromoteRolloutRequest {
+    string config_id = 1;
+    int32 new_target_percentage = 2;  // New target (must be > current target, <= 100)
+}
+
+message PromoteRolloutResponse {
+    bool success = 1;
+    string message = 2;
+    RolloutState rollout_state = 3;  // Updated state after promotion
+}
+
+// Audit log entry
+message AuditEntry {
+    int64 id = 1;
+    string config_id = 2;
+    string action = 3;
+    string performed_by = 4;
+    string service_name = 5;
+    string details = 6;
+    int64 created_at = 7;
+}
+
+// GetAuditLog - recent audit trail
+message GetAuditLogRequest {
+    string service_name = 1;  // Optional: filter by service
+    int32 limit = 2;          // Default 20
+}
+
+message GetAuditLogResponse {
+    repeated AuditEntry entries = 1;
+    bool success = 2;
+}
+
+// GetStats - system-wide counters
+message KonfigStats {
+    int32 total_configs = 1;
+    int32 active_rollouts = 2;
+    int32 total_schemas = 3;
+    int32 connected_instances = 4;
+    int32 total_services = 5;
+}
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+    KonfigStats stats = 1;
+    bool success = 2;
+}
+
+// Service summary entry
+message ServiceSummary {
+    string service_name = 1;
+    int64  latest_version = 2;
+    int32  config_count = 3;
+    string latest_updated_at = 4;  // RFC3339 timestamp of latest config
+    bool   has_active_rollout = 5;
+}
+
+message ListServicesRequest {}
+
+message ListServicesResponse {
+    repeated ServiceSummary services = 1;
+    bool success = 2;
+}
+
+// Rollout summary (for listing)
+message RolloutSummary {
+    string config_id = 1;
+    string service_name = 2;
+    string strategy = 3;
+    int32  target_percentage = 4;
+    int32  current_percentage = 5;
+    string status = 6;
+    string started_at = 7;
+    string completed_at = 8;
+}
+
+message ListRolloutsRequest {
+    string status_filter = 1; // "ACTIVE" = IN_PROGRESS+PENDING, "" = all recent
+    int32  limit = 2;
+}
+
+message ListRolloutsResponse {
+    repeated RolloutSummary rollouts = 1;
+    bool success = 2;
 }

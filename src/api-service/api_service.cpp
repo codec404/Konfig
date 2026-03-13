@@ -399,6 +399,15 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
             return grpc::Status::OK;
         }
 
+        // Only allow rollback when there is a currently active (deployed) config
+        auto active = db_->GetActiveConfig(request->service_name());
+        if (active.config_id().empty()) {
+            response->set_success(false);
+            response->set_message(
+                "No active config for this service — rollback requires a deployed config");
+            return grpc::Status::OK;
+        }
+
         // Create new version with old content
         int64_t next_version = db_->GetNextVersion(request->service_name());
         std::string new_config_id = GenerateConfigId(request->service_name(), next_version);
@@ -423,6 +432,9 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
             return grpc::Status::OK;
         }
 
+        // Immediately activate — rollback is an emergency deploy, no staged rollout needed
+        db_->SetActiveConfig(request->service_name(), new_config_id);
+
         // Audit
         db_->RecordAuditEvent(request->service_name(), new_config_id, "rollback", "api",
                               "Rolled back to v" + std::to_string(target.version()));
@@ -444,6 +456,53 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
         response->set_message("Internal error: " + std::string(e.what()));
         RecordMetric("rollback.error");
     }
+
+    return grpc::Status::OK;
+}
+
+grpc::Status ApiServiceImpl::PromoteRollout(grpc::ServerContext* context,
+                                            const configservice::PromoteRolloutRequest* request,
+                                            configservice::PromoteRolloutResponse* response) {
+    std::cout << "[ApiService] PromoteRollout: config=" << request->config_id()
+              << " new_target=" << request->new_target_percentage() << "%" << std::endl;
+    RecordMetric("rollout.promote.request");
+
+    if (request->config_id().empty()) {
+        response->set_success(false);
+        response->set_message("config_id is required");
+        return grpc::Status::OK;
+    }
+
+    int32_t new_target = request->new_target_percentage();
+    if (new_target < 1 || new_target > 100) {
+        response->set_success(false);
+        response->set_message("new_target_percentage must be between 1 and 100");
+        return grpc::Status::OK;
+    }
+
+    auto [success, message] = db_->PromoteRollout(request->config_id(), new_target);
+
+    if (!success) {
+        response->set_success(false);
+        response->set_message(message);
+        RecordMetric("rollout.promote.failed");
+        return grpc::Status::OK;
+    }
+
+    auto state = db_->GetRolloutState(request->config_id());
+    *response->mutable_rollout_state() = state;
+
+    auto config = db_->GetConfigById(request->config_id());
+    if (!config.service_name().empty()) {
+        PublishEvent("config.rollout_promoted", config.service_name(), config.version(), "api");
+    }
+
+    response->set_success(true);
+    response->set_message(message);
+    RecordMetric("rollout.promote.success");
+
+    std::cout << "[ApiService] ✓ Rollout promoted: " << request->config_id() << " -> " << new_target
+              << "%" << std::endl;
 
     return grpc::Status::OK;
 }
@@ -571,6 +630,59 @@ std::string ApiServiceImpl::ComputeHash(const std::string& content) {
     std::ostringstream oss;
     oss << std::hex << hash;
     return oss.str();
+}
+
+grpc::Status ApiServiceImpl::GetAuditLog(grpc::ServerContext* context,
+                                         const configservice::GetAuditLogRequest* request,
+                                         configservice::GetAuditLogResponse* response) {
+    std::cout << "[ApiService] GetAuditLog: service=" << request->service_name() << std::endl;
+
+    int limit = request->limit() > 0 ? request->limit() : 20;
+    auto entries = db_->GetAuditLog(request->service_name(), limit);
+
+    for (const auto& entry : entries) {
+        *response->add_entries() = entry;
+    }
+
+    response->set_success(true);
+    return grpc::Status::OK;
+}
+
+grpc::Status ApiServiceImpl::GetStats(grpc::ServerContext* context,
+                                      const configservice::GetStatsRequest* request,
+                                      configservice::GetStatsResponse* response) {
+    std::cout << "[ApiService] GetStats" << std::endl;
+
+    auto stats = db_->GetStats();
+    *response->mutable_stats() = stats;
+    response->set_success(true);
+    return grpc::Status::OK;
+}
+
+grpc::Status ApiServiceImpl::ListServices(grpc::ServerContext* context,
+                                          const configservice::ListServicesRequest* request,
+                                          configservice::ListServicesResponse* response) {
+    std::cout << "[ApiService] ListServices" << std::endl;
+
+    auto services = db_->ListServices();
+    for (const auto& svc : services) {
+        *response->add_services() = svc;
+    }
+    response->set_success(true);
+    return grpc::Status::OK;
+}
+
+grpc::Status ApiServiceImpl::ListRollouts(grpc::ServerContext* context,
+                                          const configservice::ListRolloutsRequest* request,
+                                          configservice::ListRolloutsResponse* response) {
+    std::cout << "[ApiService] ListRollouts: filter=" << request->status_filter() << std::endl;
+
+    auto rollouts = db_->ListRollouts(request->status_filter(), request->limit());
+    for (const auto& r : rollouts) {
+        *response->add_rollouts() = r;
+    }
+    response->set_success(true);
+    return grpc::Status::OK;
 }
 
 }  // namespace apiservice
