@@ -55,6 +55,26 @@ class ApiServiceImpl final : public configservice::ConfigAPIService::Service {
                           const configservice::RollbackRequest* request,
                           configservice::RollbackResponse* response) override;
 
+    grpc::Status PromoteRollout(grpc::ServerContext* context,
+                                const configservice::PromoteRolloutRequest* request,
+                                configservice::PromoteRolloutResponse* response) override;
+
+    grpc::Status GetAuditLog(grpc::ServerContext* context,
+                             const configservice::GetAuditLogRequest* request,
+                             configservice::GetAuditLogResponse* response) override;
+
+    grpc::Status GetStats(grpc::ServerContext* context,
+                          const configservice::GetStatsRequest* request,
+                          configservice::GetStatsResponse* response) override;
+
+    grpc::Status ListServices(grpc::ServerContext* context,
+                              const configservice::ListServicesRequest* request,
+                              configservice::ListServicesResponse* response) override;
+
+    grpc::Status ListRollouts(grpc::ServerContext* context,
+                              const configservice::ListRolloutsRequest* request,
+                              configservice::ListRolloutsResponse* response) override;
+
    private:
     ServiceConfig config_;
     std::unique_ptr<DatabaseManager> db_;

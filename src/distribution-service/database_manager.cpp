@@ -380,6 +380,18 @@ bool DatabaseManager::UpdateRolloutProgress(const std::string& config_id, int32_
         sql += " WHERE config_id = $1";
 
         txn.exec_params(sql, config_id, current_pct, status);
+
+        // On successful completion, mark this config active and deactivate others
+        if (status == "COMPLETED") {
+            txn.exec_params("UPDATE config_metadata SET is_active = false "
+                            "WHERE service_name = (SELECT service_name FROM config_metadata WHERE "
+                            "config_id = $1) "
+                            "AND config_id != $1",
+                            config_id);
+            txn.exec_params("UPDATE config_metadata SET is_active = true WHERE config_id = $1",
+                            config_id);
+        }
+
         txn.commit();
 
         std::cout << "[DB] Rollout progress: " << config_id << " → " << current_pct << "% ("

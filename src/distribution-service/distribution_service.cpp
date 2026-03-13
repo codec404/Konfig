@@ -631,8 +631,8 @@ void DistributionServiceImpl::ExecuteRollout(const std::string& service_name,
     int32_t current_pct = total > 0 ? static_cast<int32_t>(pushed * 100 / total) : 100;
 
     std::string new_status;
-    if (rollout.strategy == 1) {
-        // CANARY stays IN_PROGRESS — operator promotes or rolls back
+    if (rollout.strategy == 1 && rollout.target_percentage < 100) {
+        // CANARY below 100% stays IN_PROGRESS — operator promotes or rolls back
         new_status = "IN_PROGRESS";
     } else if (rollout.strategy == 2 && current_pct < rollout.target_percentage) {
         new_status = "IN_PROGRESS";

@@ -88,13 +88,18 @@ std::pair<bool, std::string> DatabaseManager::InsertConfig(const configservice::
     try {
         pqxx::work txn(*conn_);
 
-        // Insert into config_metadata
+        // First config for a service is auto-activated (nothing else exists yet).
+        // Subsequent uploads stay inactive until a rollout completes.
+        pqxx::result existing = txn.exec_params(
+            "SELECT COUNT(*) FROM config_metadata WHERE service_name = $1", config.service_name());
+        bool is_first = existing[0][0].as<int64_t>() == 0;
+
         txn.exec_params("INSERT INTO config_metadata "
                         "  (config_id, service_name, version, format, "
                         "   created_by, description, is_active) "
-                        "VALUES ($1, $2, $3, $4, $5, $6, true)",
+                        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
                         config.config_id(), config.service_name(), config.version(),
-                        config.format(), config.created_by(), description);
+                        config.format(), config.created_by(), description, is_first);
 
         // Insert into config_data
         txn.exec_params("INSERT INTO config_data "
@@ -170,6 +175,57 @@ configservice::ConfigData DatabaseManager::GetLatestConfig(const std::string& se
 
     } catch (const std::exception& e) {
         std::cerr << "[DB] GetLatestConfig failed: " << e.what() << std::endl;
+        throw;
+    }
+}
+
+configservice::ConfigData DatabaseManager::GetActiveConfig(const std::string& service_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    try {
+        pqxx::work txn(*conn_);
+
+        pqxx::result r =
+            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+                            "       COALESCE(d.content_hash, '') as content_hash, "
+                            "       m.created_at, m.created_by "
+                            "FROM config_metadata m "
+                            "JOIN config_data d ON m.config_id = d.config_id "
+                            "WHERE m.service_name = $1 AND m.is_active = true "
+                            "LIMIT 1",
+                            service_name);
+
+        txn.commit();
+
+        if (r.empty()) {
+            return configservice::ConfigData();
+        }
+
+        return ParseConfigRow(r[0]);
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] GetActiveConfig failed: " << e.what() << std::endl;
+        throw;
+    }
+}
+
+void DatabaseManager::SetActiveConfig(const std::string& service_name,
+                                      const std::string& config_id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    try {
+        pqxx::work txn(*conn_);
+
+        txn.exec_params("UPDATE config_metadata SET is_active = false WHERE service_name = $1",
+                        service_name);
+        txn.exec_params("UPDATE config_metadata SET is_active = true WHERE config_id = $1",
+                        config_id);
+        txn.commit();
+
+        std::cout << "[DB] SetActiveConfig: " << config_id << " is now active" << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] SetActiveConfig failed: " << e.what() << std::endl;
         throw;
     }
 }
@@ -287,6 +343,52 @@ std::pair<bool, std::string> DatabaseManager::DeleteConfigById(const std::string
     }
 }
 
+std::pair<bool, std::string> DatabaseManager::PromoteRollout(const std::string& config_id,
+                                                             int32_t new_target_percentage) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!initialized_) {
+        return {false, "Database not initialized"};
+    }
+
+    try {
+        pqxx::work txn(*conn_);
+
+        auto r = txn.exec_params(
+            "SELECT status, target_percentage FROM rollout_state WHERE config_id = $1", config_id);
+
+        if (r.empty()) {
+            return {false, "No rollout found for config: " + config_id};
+        }
+
+        std::string status = r[0]["status"].as<std::string>();
+        if (status != "IN_PROGRESS" && status != "PENDING") {
+            return {false, "Rollout is not active (status: " + status + ")"};
+        }
+
+        int32_t current_target = r[0]["target_percentage"].as<int32_t>(0);
+        if (new_target_percentage <= current_target) {
+            return {false, "New target (" + std::to_string(new_target_percentage) +
+                               "%) must be greater than current target (" +
+                               std::to_string(current_target) + "%)"};
+        }
+
+        txn.exec_params("UPDATE rollout_state SET target_percentage = $1 WHERE config_id = $2",
+                        new_target_percentage, config_id);
+
+        txn.commit();
+
+        std::cout << "[DB] Promoted rollout " << config_id << " to " << new_target_percentage << "%"
+                  << std::endl;
+
+        return {true, "Rollout promoted to " + std::to_string(new_target_percentage) + "%"};
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] PromoteRollout failed: " << e.what() << std::endl;
+        return {false, e.what()};
+    }
+}
+
 std::pair<bool, std::string> DatabaseManager::CreateRollout(const std::string& config_id,
                                                             configservice::RolloutStrategy strategy,
                                                             int32_t target_percentage) {
@@ -298,6 +400,15 @@ std::pair<bool, std::string> DatabaseManager::CreateRollout(const std::string& c
 
     try {
         pqxx::work txn(*conn_);
+
+        // Supersede any existing active rollouts for the same service
+        txn.exec_params(
+            "UPDATE rollout_state SET status = 'COMPLETED', completed_at = NOW() "
+            "WHERE config_id IN ("
+            "  SELECT config_id FROM config_metadata "
+            "  WHERE service_name = (SELECT service_name FROM config_metadata WHERE config_id = $1)"
+            ") AND status IN ('IN_PROGRESS', 'PENDING') AND config_id != $1",
+            config_id);
 
         txn.exec_params("INSERT INTO rollout_state "
                         "  (config_id, strategy, target_percentage, "
@@ -388,7 +499,8 @@ std::vector<configservice::ServiceInstance> DatabaseManager::GetServiceInstances
 
         pqxx::result r =
             txn.exec_params("SELECT service_name, instance_id, current_config_version, "
-                            "       last_heartbeat, status "
+                            "       EXTRACT(EPOCH FROM last_heartbeat)::BIGINT as last_heartbeat, "
+                            "       status "
                             "FROM service_instances "
                             "WHERE service_name = $1 "
                             "ORDER BY instance_id",
@@ -479,6 +591,211 @@ configservice::ConfigMetadata DatabaseManager::ParseMetadataRow(const pqxx::row&
     meta.set_description(row["description"].as<std::string>(""));
     meta.set_is_active(row["is_active"].as<bool>(true));
     return meta;
+}
+
+std::vector<configservice::AuditEntry> DatabaseManager::GetAuditLog(const std::string& service_name,
+                                                                    int limit) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<configservice::AuditEntry> entries;
+
+    try {
+        pqxx::work txn(*conn_);
+        pqxx::result r;
+
+        if (!service_name.empty()) {
+            r = txn.exec_params("SELECT id, config_id, action, performed_by, "
+                                "       details->>'service_name' AS service_name, "
+                                "       details->>'details' AS detail_text, "
+                                "       EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix "
+                                "FROM audit_log "
+                                "WHERE details->>'service_name' = $1 "
+                                "ORDER BY created_at DESC LIMIT $2",
+                                service_name, limit > 0 ? limit : 20);
+        } else {
+            r = txn.exec_params("SELECT id, config_id, action, performed_by, "
+                                "       details->>'service_name' AS service_name, "
+                                "       details->>'details' AS detail_text, "
+                                "       EXTRACT(EPOCH FROM created_at)::bigint AS created_at_unix "
+                                "FROM audit_log "
+                                "ORDER BY created_at DESC LIMIT $1",
+                                limit > 0 ? limit : 20);
+        }
+
+        txn.commit();
+
+        for (const auto& row : r) {
+            configservice::AuditEntry entry;
+            entry.set_id(row["id"].as<int64_t>(0));
+            entry.set_config_id(row["config_id"].as<std::string>(""));
+            entry.set_action(row["action"].as<std::string>(""));
+            entry.set_performed_by(row["performed_by"].as<std::string>(""));
+            entry.set_service_name(
+                row["service_name"].is_null() ? "" : row["service_name"].as<std::string>());
+            entry.set_details(row["detail_text"].is_null() ? ""
+                                                           : row["detail_text"].as<std::string>());
+            entry.set_created_at(row["created_at_unix"].as<int64_t>(0));
+            entries.push_back(entry);
+        }
+
+        return entries;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] GetAuditLog failed: " << e.what() << std::endl;
+        return entries;
+    }
+}
+
+configservice::KonfigStats DatabaseManager::GetStats() {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    configservice::KonfigStats stats;
+
+    try {
+        pqxx::work txn(*conn_);
+
+        // Total configs
+        auto r1 = txn.exec("SELECT COUNT(*) FROM config_metadata");
+        stats.set_total_configs(r1[0][0].as<int32_t>(0));
+
+        // Total services
+        auto r2 = txn.exec("SELECT COUNT(DISTINCT service_name) FROM config_metadata");
+        stats.set_total_services(r2[0][0].as<int32_t>(0));
+
+        // Active rollouts (IN_PROGRESS or PENDING)
+        auto r3 = txn.exec(
+            "SELECT COUNT(*) FROM rollout_state WHERE status IN ('IN_PROGRESS', 'PENDING')");
+        stats.set_active_rollouts(r3[0][0].as<int32_t>(0));
+
+        // Total schemas
+        auto r4 = txn.exec("SELECT COUNT(*) FROM validation_schemas WHERE is_active = true");
+        stats.set_total_schemas(r4[0][0].as<int32_t>(0));
+
+        // Connected instances (heartbeat within last 120 seconds)
+        auto r5 = txn.exec("SELECT COUNT(*) FROM service_instances "
+                           "WHERE last_heartbeat > NOW() - INTERVAL '120 seconds'");
+        stats.set_connected_instances(r5[0][0].as<int32_t>(0));
+
+        txn.commit();
+
+        return stats;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] GetStats failed: " << e.what() << std::endl;
+        return stats;
+    }
+}
+
+std::vector<configservice::ServiceSummary> DatabaseManager::ListServices() {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<configservice::ServiceSummary> services;
+
+    try {
+        pqxx::work txn(*conn_);
+
+        pqxx::result r = txn.exec("SELECT "
+                                  "  cm.service_name, "
+                                  "  MAX(cm.version) AS latest_version, "
+                                  "  COUNT(*) AS config_count, "
+                                  "  MAX(cm.created_at) AS latest_updated_at, "
+                                  "  EXISTS( "
+                                  "    SELECT 1 FROM rollout_state rs "
+                                  "    WHERE rs.config_id LIKE cm.service_name || '-%' "
+                                  "      AND rs.status IN ('IN_PROGRESS', 'PENDING') "
+                                  "  ) AS has_active_rollout "
+                                  "FROM config_metadata cm "
+                                  "GROUP BY cm.service_name "
+                                  "ORDER BY cm.service_name");
+
+        txn.commit();
+
+        for (const auto& row : r) {
+            configservice::ServiceSummary svc;
+            svc.set_service_name(row["service_name"].as<std::string>());
+            svc.set_latest_version(row["latest_version"].as<int64_t>(0));
+            svc.set_config_count(row["config_count"].as<int32_t>(0));
+            if (!row["latest_updated_at"].is_null()) {
+                svc.set_latest_updated_at(row["latest_updated_at"].as<std::string>());
+            }
+            svc.set_has_active_rollout(row["has_active_rollout"].as<bool>(false));
+            services.push_back(svc);
+        }
+
+        return services;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] ListServices failed: " << e.what() << std::endl;
+        return services;
+    }
+}
+
+std::vector<configservice::RolloutSummary> DatabaseManager::ListRollouts(
+    const std::string& status_filter, int limit) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<configservice::RolloutSummary> rollouts;
+
+    try {
+        pqxx::work txn(*conn_);
+        pqxx::result r;
+
+        int lim = limit > 0 ? limit : 50;
+
+        if (status_filter == "ACTIVE") {
+            r = txn.exec_params(
+                "SELECT rs.config_id, COALESCE(cm.service_name, '') AS service_name, "
+                "       rs.strategy, rs.target_percentage, rs.current_percentage, "
+                "       rs.status, rs.started_at, rs.completed_at "
+                "FROM rollout_state rs "
+                "LEFT JOIN config_metadata cm ON cm.config_id = rs.config_id "
+                "WHERE rs.status IN ('IN_PROGRESS', 'PENDING') "
+                "ORDER BY rs.started_at DESC LIMIT $1",
+                lim);
+        } else if (!status_filter.empty()) {
+            r = txn.exec_params(
+                "SELECT rs.config_id, COALESCE(cm.service_name, '') AS service_name, "
+                "       rs.strategy, rs.target_percentage, rs.current_percentage, "
+                "       rs.status, rs.started_at, rs.completed_at "
+                "FROM rollout_state rs "
+                "LEFT JOIN config_metadata cm ON cm.config_id = rs.config_id "
+                "WHERE rs.status = $1 "
+                "ORDER BY rs.started_at DESC LIMIT $2",
+                status_filter, lim);
+        } else {
+            r = txn.exec_params(
+                "SELECT rs.config_id, COALESCE(cm.service_name, '') AS service_name, "
+                "       rs.strategy, rs.target_percentage, rs.current_percentage, "
+                "       rs.status, rs.started_at, rs.completed_at "
+                "FROM rollout_state rs "
+                "LEFT JOIN config_metadata cm ON cm.config_id = rs.config_id "
+                "ORDER BY rs.started_at DESC LIMIT $1",
+                lim);
+        }
+
+        txn.commit();
+
+        for (const auto& row : r) {
+            configservice::RolloutSummary rs;
+            rs.set_config_id(row["config_id"].as<std::string>(""));
+            rs.set_service_name(row["service_name"].as<std::string>(""));
+            rs.set_strategy(row["strategy"].as<std::string>(""));
+            rs.set_target_percentage(row["target_percentage"].as<int32_t>(100));
+            rs.set_current_percentage(row["current_percentage"].as<int32_t>(0));
+            rs.set_status(row["status"].as<std::string>(""));
+            if (!row["started_at"].is_null())
+                rs.set_started_at(row["started_at"].as<std::string>());
+            if (!row["completed_at"].is_null())
+                rs.set_completed_at(row["completed_at"].as<std::string>());
+            rollouts.push_back(rs);
+        }
+
+        return rollouts;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] ListRollouts failed: " << e.what() << std::endl;
+        return rollouts;
+    }
 }
 
 }  // namespace apiservice

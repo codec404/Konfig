@@ -83,6 +83,41 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ─── Web Layer ──────────────────────────────────────────────────────
+
+  web-backend:
+    build:
+      context: ..
+      dockerfile: Konfig-Web-Backend/Dockerfile
+    container_name: konfig-web-backend
+    ports:
+      - "8090:8090"
+    environment:
+      PORT: "8090"
+      KONFIG_API_ADDR: "api-service:8081"
+      KONFIG_DIST_ADDR: "distribution-service:8082"
+      KONFIG_VAL_ADDR: "validation-service:8083"
+    networks:
+      - config-network
+    depends_on:
+      - api-service
+      - distribution-service
+      - validation-service
+    restart: unless-stopped
+
+  web-frontend:
+    build:
+      context: ../Konfig-Web-Frontend
+      dockerfile: Dockerfile
+    container_name: konfig-web-frontend
+    ports:
+      - "3001:80"
+    networks:
+      - config-network
+    depends_on:
+      - web-backend
+    restart: unless-stopped
+
   # ─── Infrastructure ─────────────────────────────────────────────────
 
   postgres:

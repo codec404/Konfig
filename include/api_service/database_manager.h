@@ -38,6 +38,12 @@ class DatabaseManager {
     // Get by version (for rollback)
     configservice::ConfigData GetConfigByVersion(const std::string& service_name, int64_t version);
 
+    // Get currently active (deployed) config for a service
+    configservice::ConfigData GetActiveConfig(const std::string& service_name);
+
+    // Set a specific config as active, deactivating all others for the service
+    void SetActiveConfig(const std::string& service_name, const std::string& config_id);
+
     // List returns ConfigMetadata (as proto defines ListConfigs)
     std::vector<configservice::ConfigMetadata> ListConfigs(const std::string& service_name,
                                                            int limit, int offset, int& total_count);
@@ -55,6 +61,9 @@ class DatabaseManager {
 
     configservice::RolloutState GetRolloutState(const std::string& config_id);
 
+    std::pair<bool, std::string> PromoteRollout(const std::string& config_id,
+                                                int32_t new_target_percentage);
+
     std::vector<configservice::ServiceInstance> GetServiceInstances(
         const std::string& service_name);
 
@@ -67,6 +76,19 @@ class DatabaseManager {
     void RecordAuditEvent(const std::string& service_name, const std::string& config_id,
                           const std::string& action, const std::string& performed_by,
                           const std::string& details);
+
+    // Get recent audit log entries
+    std::vector<configservice::AuditEntry> GetAuditLog(const std::string& service_name, int limit);
+
+    // Get system-wide stats
+    configservice::KonfigStats GetStats();
+
+    // List all services with summary info
+    std::vector<configservice::ServiceSummary> ListServices();
+
+    // List rollouts with optional status filter
+    std::vector<configservice::RolloutSummary> ListRollouts(const std::string& status_filter,
+                                                            int limit);
 
    private:
     PostgresConfig config_;
