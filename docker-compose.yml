@@ -149,6 +149,22 @@ services:
       - web-backend
     restart: unless-stopped
 
+  caddy:
+    image: caddy:alpine
+    container_name: konfig-caddy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-certs:/config
+    networks:
+      - config-network
+    depends_on:
+      - web-frontend
+    restart: unless-stopped
+
   # ─── Infrastructure ─────────────────────────────────────────────────
 
   postgres:
@@ -324,6 +340,8 @@ services:
       - postgres
 
 volumes:
+  caddy-data:
+  caddy-certs:
   postgres-data:
   web-postgres-data:
   redis-data:
