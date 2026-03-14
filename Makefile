@@ -8,7 +8,7 @@
         proto-native sdk-native example-native cache-test-native all-native \
         dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-cache-test dev-clean dev-test-statsd \
         cli cli-build cli-install cli-clean \
-        build deploy-prod
+        build-all deploy-prod
 
 # Colors
 RED := \033[0;31m
@@ -656,7 +656,7 @@ rebuild: clean all
 #==============================================================================
 
 # Dev — start everything locally (frontend on :3001)
-build:
+build-all:
 	@echo "$(YELLOW)Building and starting all services (dev)...$(NC)"
 	@docker compose up --build -d
 	@echo "$(GREEN)✓ Dev stack started — frontend on http://localhost:3001$(NC)"
