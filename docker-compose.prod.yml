@@ -1,0 +1,77 @@
+# Production overrides — use with:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Key changes vs dev:
+#   - Frontend served on port 80 (not 3001)
+#   - Dev-only tools (Kafka UI, pgAdmin, Grafana, Prometheus) have no host-facing ports
+#     (still reachable inside the Docker network; open your OCI Security List only for 22/80/443)
+#   - All core services have explicit restart: unless-stopped
+
+services:
+  # ── Web ─────────────────────────────────────────────────────────────────
+
+  web-frontend:
+    ports:
+      - "80:80"    # was 3001:80 in dev
+    restart: unless-stopped
+
+  web-backend:
+    restart: unless-stopped
+
+  web-postgres:
+    restart: unless-stopped
+
+  # ── C++ Core ─────────────────────────────────────────────────────────────
+
+  api-service:
+    restart: unless-stopped
+
+  distribution-service:
+    restart: unless-stopped
+
+  validation-service:
+    restart: unless-stopped
+
+  # ── Infrastructure ───────────────────────────────────────────────────────
+
+  postgres:
+    ports: []        # no external exposure in prod
+    restart: unless-stopped
+
+  redis:
+    ports: []        # no external exposure in prod
+    restart: unless-stopped
+
+  zookeeper:
+    ports: []
+    restart: unless-stopped
+
+  kafka:
+    ports: []        # internal-only; clients use kafka:9092 inside Docker network
+    restart: unless-stopped
+
+  # ── Monitoring (internal-only in prod) ──────────────────────────────────
+
+  statsd-exporter:
+    ports: []
+    restart: unless-stopped
+
+  prometheus:
+    ports: []
+    restart: unless-stopped
+
+  grafana:
+    ports: []
+    restart: unless-stopped
+
+  # ── Dev-only tools (disabled in prod) ────────────────────────────────────
+
+  kafka-ui:
+    ports: []
+
+  pgadmin:
+    ports: []
+
+  dev-container:
+    profiles:
+      - dev    # won't start unless --profile dev is passed
