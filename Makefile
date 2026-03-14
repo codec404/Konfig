@@ -7,7 +7,8 @@
         example cache-test test-statsd \
         proto-native sdk-native example-native cache-test-native all-native \
         dev-up dev-down dev-shell dev-build dev-proto dev-sdk dev-example dev-cache-test dev-clean dev-test-statsd \
-        cli cli-build cli-install cli-clean
+        cli cli-build cli-install cli-clean \
+        build deploy-prod
 
 # Colors
 RED := \033[0;31m
@@ -649,6 +650,21 @@ clean:
 	@echo "$(GREEN)✓ Build artifacts cleaned$(NC)"
 
 rebuild: clean all
+
+#==============================================================================
+# DEPLOYMENT
+#==============================================================================
+
+# Dev — start everything locally (frontend on :3001)
+build:
+	@echo "$(YELLOW)Building and starting all services (dev)...$(NC)"
+	@docker compose up --build -d
+	@echo "$(GREEN)✓ Dev stack started — frontend on http://localhost:3001$(NC)"
+
+# Production — frontend on :80, monitoring ports internal-only
+deploy-prod:
+	@echo "$(YELLOW)Deploying to production...$(NC)"
+	@bash scripts/deploy.sh
 
 #==============================================================================
 # NATIVE BUILD TARGETS (used by dev container)
