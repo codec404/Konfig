@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS rollout_state (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS idx_rollout_config_id ON rollout_state(config_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rollout_config_id ON rollout_state(config_id);
 CREATE INDEX IF NOT EXISTS idx_rollout_status ON rollout_state(status);
 
 -- Migration complete
