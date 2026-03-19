@@ -36,6 +36,53 @@ for dir in Konfig Konfig-Web-Frontend Konfig-Web-Backend; do
   fi
 done
 
+# ── Auto-run pending DB migrations ───────────────────────────────────────
+info "Checking for pending database migrations..."
+MIGRATIONS_DIR="$KONFIG_DIR/db/migrations"
+
+# Load DB credentials from .env
+DB_USER=$(grep -E '^POSTGRES_USER=' "$ENV_FILE" | cut -d= -f2 | tr -d '"' || echo "konfig")
+DB_NAME=$(grep -E '^POSTGRES_DB=' "$ENV_FILE" | cut -d= -f2 | tr -d '"' || echo "konfig")
+
+# Ensure schema_migrations table exists
+docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" \
+  -f /dev/stdin < "$MIGRATIONS_DIR/000_migration_tracker.sql" &>/dev/null || true
+
+# Fetch already-applied migration numbers
+APPLIED=$(docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -t -A \
+  -c "SELECT migration_number FROM schema_migrations WHERE status = 'success' ORDER BY migration_number;" \
+  2>/dev/null || echo "")
+
+PENDING=0
+for file in $(ls "$MIGRATIONS_DIR"/*.sql | sort); do
+  filename=$(basename "$file")
+  # Extract leading number (e.g. 003 from 003_client_instances.sql)
+  num=$(echo "$filename" | grep -oE '^[0-9]+' | sed 's/^0*//')
+  [ -z "$num" ] && continue
+  # Skip if already applied
+  echo "$APPLIED" | grep -qx "$num" && continue
+
+  info "  Applying migration: $filename"
+  START_MS=$(date +%s%3N)
+  docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" \
+    -f /dev/stdin < "$file" \
+    && STATUS="success" || STATUS="failed"
+  END_MS=$(date +%s%3N)
+  ELAPSED=$((END_MS - START_MS))
+
+  # Record in tracker
+  docker compose exec -T postgres psql -U "$DB_USER" -d "$DB_NAME" -c \
+    "INSERT INTO schema_migrations (migration_number, migration_name, status, execution_time_ms)
+     VALUES ($num, '$filename', '$STATUS', $ELAPSED)
+     ON CONFLICT (migration_number) DO UPDATE SET status='$STATUS', execution_time_ms=$ELAPSED;" \
+     &>/dev/null || true
+
+  [ "$STATUS" = "failed" ] && error "Migration $filename failed — aborting deploy."
+  PENDING=$((PENDING + 1))
+done
+
+[ "$PENDING" -eq 0 ] && info "  No pending migrations." || info "  Applied $PENDING migration(s)."
+
 # ── Build and start ───────────────────────────────────────────────────────
 info "Building and starting services (production mode)..."
 cd "$KONFIG_DIR"
