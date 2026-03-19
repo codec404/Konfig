@@ -10,6 +10,8 @@
 \i /docker-entrypoint-initdb.d/migrations/006_functions_triggers.sql
 \i /docker-entrypoint-initdb.d/migrations/007_views.sql
 \i /docker-entrypoint-initdb.d/migrations/008_permissions.sql
+\i /docker-entrypoint-initdb.d/migrations/009_named_configs.sql
+\i /docker-entrypoint-initdb.d/migrations/010_fix_active_flag.sql
 
 -- Log completion
 SELECT 'All migrations applied successfully' as status;

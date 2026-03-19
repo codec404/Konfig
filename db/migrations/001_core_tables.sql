@@ -39,11 +39,11 @@ CREATE TABLE IF NOT EXISTS config_data (
 
 CREATE INDEX IF NOT EXISTS idx_config_data_config_id ON config_data(config_id);
 
--- Insert sample data
-INSERT INTO config_metadata (config_id, service_name, version, format, created_by, description)
+-- Insert sample data (latest version is active; older versions are inactive)
+INSERT INTO config_metadata (config_id, service_name, version, format, created_by, description, is_active)
 VALUES
-    ('app-config-v1', 'example-service', 1, 'json', 'admin', 'Initial configuration'),
-    ('app-config-v2', 'example-service', 2, 'json', 'admin', 'Updated configuration')
+    ('app-config-v1', 'example-service', 1, 'json', 'admin', 'Initial configuration', false),
+    ('app-config-v2', 'example-service', 2, 'json', 'admin', 'Updated configuration', true)
 ON CONFLICT (config_id) DO NOTHING;
 
 INSERT INTO config_data (config_id, content, content_hash, size_bytes)

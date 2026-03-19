@@ -99,6 +99,11 @@ grpc::Status ApiServiceImpl::UploadConfig(grpc::ServerContext* context,
         response->set_message("service_name is required");
         return grpc::Status::OK;
     }
+    if (request->config_name().empty()) {
+        response->set_success(false);
+        response->set_message("config_name is required");
+        return grpc::Status::OK;
+    }
     if (request->content().empty()) {
         response->set_success(false);
         response->set_message("content is required");
@@ -145,16 +150,18 @@ grpc::Status ApiServiceImpl::UploadConfig(grpc::ServerContext* context,
         }
     }
 
-    // Get next version
-    int64_t next_version = db_->GetNextVersion(request->service_name());
+    // Get next version for this named config
+    int64_t next_version = db_->GetNextVersion(request->service_name(), request->config_name());
 
-    // Build config_id
-    std::string config_id = GenerateConfigId(request->service_name(), next_version);
+    // Build config_id: service-configname-vN
+    std::string config_id =
+        GenerateConfigId(request->service_name(), request->config_name(), next_version);
 
     // Build ConfigData matching proto
     configservice::ConfigData config;
     config.set_config_id(config_id);
     config.set_service_name(request->service_name());
+    config.set_config_name(request->config_name());
     config.set_version(next_version);
     config.set_content(request->content());
     config.set_format(request->format().empty() ? "json" : request->format());
@@ -239,7 +246,8 @@ grpc::Status ApiServiceImpl::ListConfigs(grpc::ServerContext* context,
         int offset = request->offset();
         int total_count = 0;
 
-        auto configs = db_->ListConfigs(request->service_name(), limit, offset, total_count);
+        auto configs = db_->ListConfigs(request->service_name(), request->config_name(), limit,
+                                        offset, total_count);
 
         for (const auto& config : configs) {
             *response->add_configs() = config;
@@ -317,6 +325,11 @@ grpc::Status ApiServiceImpl::StartRollout(grpc::ServerContext* context,
         return grpc::Status::OK;
     }
 
+    // Activate the rolled-out config immediately.
+    // The is_active flag tracks which version is the current live version;
+    // rollout progress (current_percentage) is tracked separately in rollout_state.
+    db_->SetActiveConfig(config.service_name(), config.config_name(), request->config_id());
+
     // Publish rollout event
     PublishEvent("config.rollout_started", config.service_name(), config.version(), "api");
 
@@ -366,7 +379,8 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
                                       const configservice::RollbackRequest* request,
                                       configservice::RollbackResponse* response) {
     std::cout << "[ApiService] Rollback: service=" << request->service_name()
-              << " to_version=" << request->target_version() << std::endl;
+              << " config=" << request->config_name() << " to_version=" << request->target_version()
+              << std::endl;
     RecordMetric("rollback.request");
 
     if (request->service_name().empty()) {
@@ -374,22 +388,29 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
         response->set_message("service_name is required");
         return grpc::Status::OK;
     }
+    if (request->config_name().empty()) {
+        response->set_success(false);
+        response->set_message("config_name is required");
+        return grpc::Status::OK;
+    }
+
+    const std::string& svc = request->service_name();
+    const std::string& cfg = request->config_name();
 
     try {
         configservice::ConfigData target;
 
-        // target_version 0 means previous version
+        // target_version 0 means one before the current latest
         if (request->target_version() == 0) {
-            // Get current version then go back one
-            auto current = db_->GetLatestConfig(request->service_name());
+            auto current = db_->GetLatestConfigByName(svc, cfg);
             if (current.version() <= 1) {
                 response->set_success(false);
                 response->set_message("No previous version to rollback to");
                 return grpc::Status::OK;
             }
-            target = db_->GetConfigByVersion(request->service_name(), current.version() - 1);
+            target = db_->GetConfigByVersion(svc, cfg, current.version() - 1);
         } else {
-            target = db_->GetConfigByVersion(request->service_name(), request->target_version());
+            target = db_->GetConfigByVersion(svc, cfg, request->target_version());
         }
 
         if (target.config_id().empty()) {
@@ -400,21 +421,22 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
         }
 
         // Only allow rollback when there is a currently active (deployed) config
-        auto active = db_->GetActiveConfig(request->service_name());
+        auto active = db_->GetActiveConfig(svc, cfg);
         if (active.config_id().empty()) {
             response->set_success(false);
             response->set_message(
-                "No active config for this service — rollback requires a deployed config");
+                "No active config for this named config — rollback requires a deployed version");
             return grpc::Status::OK;
         }
 
         // Create new version with old content
-        int64_t next_version = db_->GetNextVersion(request->service_name());
-        std::string new_config_id = GenerateConfigId(request->service_name(), next_version);
+        int64_t next_version = db_->GetNextVersion(svc, cfg);
+        std::string new_config_id = GenerateConfigId(svc, cfg, next_version);
 
         configservice::ConfigData rollback_config;
         rollback_config.set_config_id(new_config_id);
-        rollback_config.set_service_name(target.service_name());
+        rollback_config.set_service_name(svc);
+        rollback_config.set_config_name(cfg);
         rollback_config.set_version(next_version);
         rollback_config.set_content(target.content());
         rollback_config.set_format(target.format());
@@ -433,14 +455,14 @@ grpc::Status ApiServiceImpl::Rollback(grpc::ServerContext* context,
         }
 
         // Immediately activate — rollback is an emergency deploy, no staged rollout needed
-        db_->SetActiveConfig(request->service_name(), new_config_id);
+        db_->SetActiveConfig(svc, cfg, new_config_id);
 
         // Audit
-        db_->RecordAuditEvent(request->service_name(), new_config_id, "rollback", "api",
+        db_->RecordAuditEvent(svc, new_config_id, "rollback", "api",
                               "Rolled back to v" + std::to_string(target.version()));
 
         // Publish event
-        PublishEvent("config.rolled_back", request->service_name(), next_version, "api");
+        PublishEvent("config.rolled_back", svc, next_version, "api");
 
         response->set_success(true);
         response->set_config_id(new_config_id);
@@ -617,8 +639,9 @@ void ApiServiceImpl::RecordMetric(const std::string& metric) {
     }
 }
 
-std::string ApiServiceImpl::GenerateConfigId(const std::string& service_name, int64_t version) {
-    return service_name + "-v" + std::to_string(version);
+std::string ApiServiceImpl::GenerateConfigId(const std::string& service_name,
+                                             const std::string& config_name, int64_t version) {
+    return service_name + "-" + config_name + "-v" + std::to_string(version);
 }
 
 std::string ApiServiceImpl::ComputeHash(const std::string& content) {
@@ -682,6 +705,29 @@ grpc::Status ApiServiceImpl::ListRollouts(grpc::ServerContext* context,
         *response->add_rollouts() = r;
     }
     response->set_success(true);
+    return grpc::Status::OK;
+}
+
+grpc::Status ApiServiceImpl::ListNamedConfigs(grpc::ServerContext* context,
+                                              const configservice::ListNamedConfigsRequest* request,
+                                              configservice::ListNamedConfigsResponse* response) {
+    std::cout << "[ApiService] ListNamedConfigs: service=" << request->service_name() << std::endl;
+
+    if (request->service_name().empty()) {
+        response->set_success(false);
+        return grpc::Status::OK;
+    }
+
+    try {
+        auto named_configs = db_->ListNamedConfigs(request->service_name());
+        for (const auto& nc : named_configs) {
+            *response->add_configs() = nc;
+        }
+        response->set_success(true);
+    } catch (const std::exception& e) {
+        response->set_success(false);
+    }
+
     return grpc::Status::OK;
 }
 

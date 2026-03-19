@@ -499,7 +499,8 @@ void DistributionServiceImpl::RolloutConsumerLoop() {
             std::string payload(static_cast<const char*>(msg->payload()), msg->len());
 
             std::string event_type = ExtractJsonString(payload, "event_type");
-            if (event_type == "config.rollout_started" || event_type == "config.rolled_back") {
+            if (event_type == "config.rollout_started" || event_type == "config.rolled_back" ||
+                event_type == "config.rollout_promoted") {
                 std::string service_name = ExtractJsonString(payload, "service_name");
                 int64_t version = ExtractJsonInt(payload, "version");
 
@@ -588,8 +589,41 @@ void DistributionServiceImpl::ExecuteRollout(const std::string& service_name,
     size_t target_count = total;  // default: ALL_AT_ONCE
 
     if (rollout.strategy == 1) {
-        // CANARY: push to ~10% (minimum 1 instance)
-        target_count = std::max(size_t(1), total * 10 / 100);
+        // CANARY: push to target_percentage% of the fleet (minimum 1 instance).
+        // Snapshot which instance_ids are in the canary slice so new clients that
+        // connect after the rollout starts are not pulled in.
+        // If all snapshotted instances have disconnected, re-select from current clients.
+        {
+            std::lock_guard<std::mutex> cl(canary_mutex_);
+            auto& allowed = canary_instances_[config_id];  // creates empty set if absent
+
+            // Check whether any snapshotted instances are still connected
+            bool any_live = false;
+            for (const auto& c : clients) {
+                if (allowed.count(c->instance_id)) {
+                    any_live = true;
+                    break;
+                }
+            }
+
+            // (Re-)select the slice if this is the first run or all original instances left
+            if (!any_live) {
+                size_t count = std::max(
+                    size_t(1), total * static_cast<size_t>(rollout.target_percentage) / 100);
+                allowed.clear();
+                for (size_t i = 0; i < count && i < clients.size(); ++i) {
+                    allowed.insert(clients[i]->instance_id);
+                }
+            }
+
+            // Keep only the canary slice; new clients are excluded
+            clients.erase(std::remove_if(clients.begin(), clients.end(),
+                                         [&allowed](const std::shared_ptr<ClientInfo>& c) {
+                                             return !allowed.count(c->instance_id);
+                                         }),
+                          clients.end());
+            target_count = clients.size();
+        }
         std::cout << "[DistributionService] CANARY rollout: pushing to " << target_count << "/"
                   << total << " instances of " << service_name << std::endl;
     } else if (rollout.strategy == 2) {

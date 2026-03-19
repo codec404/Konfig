@@ -22,33 +22,42 @@ class DatabaseManager {
     void Shutdown();
 
     // ─────────────────────────────────────────────
-    // Config operations (aligned with proto)
+    // Config operations
     // ─────────────────────────────────────────────
 
-    // Insert config - returns {success, config_id}
+    // Insert a new version — config.config_name() and config.version() must be populated
     std::pair<bool, std::string> InsertConfig(const configservice::ConfigData& config,
                                               const std::string& description);
 
-    // Get by config_id (as proto defines GetConfig)
+    // Get full config data by config_id
     configservice::ConfigData GetConfigById(const std::string& config_id);
 
-    // Get latest for service (internal use)
-    configservice::ConfigData GetLatestConfig(const std::string& service_name);
+    // Get the latest version of a named config
+    configservice::ConfigData GetLatestConfigByName(const std::string& service_name,
+                                                    const std::string& config_name);
 
-    // Get by version (for rollback)
-    configservice::ConfigData GetConfigByVersion(const std::string& service_name, int64_t version);
+    // Get a specific version of a named config (used for rollback)
+    configservice::ConfigData GetConfigByVersion(const std::string& service_name,
+                                                 const std::string& config_name, int64_t version);
 
-    // Get currently active (deployed) config for a service
-    configservice::ConfigData GetActiveConfig(const std::string& service_name);
+    // Get the currently active (deployed) version of a named config
+    configservice::ConfigData GetActiveConfig(const std::string& service_name,
+                                              const std::string& config_name);
 
-    // Set a specific config as active, deactivating all others for the service
-    void SetActiveConfig(const std::string& service_name, const std::string& config_id);
+    // Activate one version of a named config, deactivating others in the same named config
+    void SetActiveConfig(const std::string& service_name, const std::string& config_name,
+                         const std::string& config_id);
 
-    // List returns ConfigMetadata (as proto defines ListConfigs)
+    // List versions of a named config (paginated)
     std::vector<configservice::ConfigMetadata> ListConfigs(const std::string& service_name,
+                                                           const std::string& config_name,
                                                            int limit, int offset, int& total_count);
 
-    // Delete by config_id (as proto defines DeleteConfig)
+    // List all named configs for a service (one summary row per config_name)
+    std::vector<configservice::NamedConfigSummary> ListNamedConfigs(
+        const std::string& service_name);
+
+    // Delete a specific config version by config_id
     std::pair<bool, std::string> DeleteConfigById(const std::string& config_id);
 
     // ─────────────────────────────────────────────
@@ -71,7 +80,8 @@ class DatabaseManager {
     // Helpers
     // ─────────────────────────────────────────────
 
-    int64_t GetNextVersion(const std::string& service_name);
+    // Next version number for a named config within a service
+    int64_t GetNextVersion(const std::string& service_name, const std::string& config_name);
 
     void RecordAuditEvent(const std::string& service_name, const std::string& config_id,
                           const std::string& action, const std::string& performed_by,

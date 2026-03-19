@@ -11,6 +11,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "cache_manager.h"
@@ -61,6 +62,11 @@ class DistributionServiceImpl final : public DistributionService::Service {
     // Client tracking
     std::mutex clients_mutex_;
     std::unordered_map<std::string, std::shared_ptr<ClientInfo>> active_clients_;
+
+    // Canary isolation: records which instance_ids were selected when a CANARY rollout first ran.
+    // New clients that join after the rollout starts are excluded from the canary slice.
+    std::mutex canary_mutex_;
+    std::unordered_map<std::string, std::unordered_set<std::string>> canary_instances_;
 
     // Heartbeat monitoring
     std::atomic<bool> running_;
