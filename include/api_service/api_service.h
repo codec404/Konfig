@@ -75,6 +75,10 @@ class ApiServiceImpl final : public configservice::ConfigAPIService::Service {
                               const configservice::ListRolloutsRequest* request,
                               configservice::ListRolloutsResponse* response) override;
 
+    grpc::Status ListNamedConfigs(grpc::ServerContext* context,
+                                  const configservice::ListNamedConfigsRequest* request,
+                                  configservice::ListNamedConfigsResponse* response) override;
+
    private:
     ServiceConfig config_;
     std::unique_ptr<DatabaseManager> db_;
@@ -89,7 +93,8 @@ class ApiServiceImpl final : public configservice::ConfigAPIService::Service {
     bool PublishEvent(const std::string& event_type, const std::string& service_name,
                       int64_t version, const std::string& performed_by);
     void RecordMetric(const std::string& metric);
-    std::string GenerateConfigId(const std::string& service_name, int64_t version);
+    std::string GenerateConfigId(const std::string& service_name, const std::string& config_name,
+                                 int64_t version);
     std::string ComputeHash(const std::string& content);
 };
 

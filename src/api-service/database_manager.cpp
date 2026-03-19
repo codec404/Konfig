@@ -58,14 +58,15 @@ void DatabaseManager::Shutdown() {
     std::cout << "[DB] Connection closed" << std::endl;
 }
 
-int64_t DatabaseManager::GetNextVersion(const std::string& service_name) {
+int64_t DatabaseManager::GetNextVersion(const std::string& service_name,
+                                        const std::string& config_name) {
     try {
         pqxx::work txn(*conn_);
 
         pqxx::result r = txn.exec_params("SELECT COALESCE(MAX(version), 0) + 1 "
                                          "FROM config_metadata "
-                                         "WHERE service_name = $1",
-                                         service_name);
+                                         "WHERE service_name = $1 AND config_name = $2",
+                                         service_name, config_name);
 
         txn.commit();
 
@@ -88,20 +89,21 @@ std::pair<bool, std::string> DatabaseManager::InsertConfig(const configservice::
     try {
         pqxx::work txn(*conn_);
 
-        // First config for a service is auto-activated (nothing else exists yet).
-        // Subsequent uploads stay inactive until a rollout completes.
-        pqxx::result existing = txn.exec_params(
-            "SELECT COUNT(*) FROM config_metadata WHERE service_name = $1", config.service_name());
+        // v1 of a named config is auto-activated; later versions stay inactive
+        // until a rollout promotes them.
+        pqxx::result existing = txn.exec_params("SELECT COUNT(*) FROM config_metadata "
+                                                "WHERE service_name = $1 AND config_name = $2",
+                                                config.service_name(), config.config_name());
         bool is_first = existing[0][0].as<int64_t>() == 0;
 
         txn.exec_params("INSERT INTO config_metadata "
-                        "  (config_id, service_name, version, format, "
+                        "  (config_id, service_name, config_name, version, format, "
                         "   created_by, description, is_active) "
-                        "VALUES ($1, $2, $3, $4, $5, $6, $7)",
-                        config.config_id(), config.service_name(), config.version(),
-                        config.format(), config.created_by(), description, is_first);
+                        "VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                        config.config_id(), config.service_name(), config.config_name(),
+                        config.version(), config.format(), config.created_by(), description,
+                        is_first);
 
-        // Insert into config_data
         txn.exec_params("INSERT INTO config_data "
                         "  (config_id, content, content_hash, size_bytes) "
                         "VALUES ($1, $2, $3, $4)",
@@ -127,7 +129,8 @@ configservice::ConfigData DatabaseManager::GetConfigById(const std::string& conf
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+            txn.exec_params("SELECT m.config_id, m.service_name, m.config_name, m.version, "
+                            "       d.content, m.format, "
                             "       COALESCE(d.content_hash, '') as content_hash, "
                             "       m.created_at, m.created_by "
                             "FROM config_metadata m "
@@ -149,21 +152,23 @@ configservice::ConfigData DatabaseManager::GetConfigById(const std::string& conf
     }
 }
 
-configservice::ConfigData DatabaseManager::GetLatestConfig(const std::string& service_name) {
+configservice::ConfigData DatabaseManager::GetLatestConfigByName(const std::string& service_name,
+                                                                 const std::string& config_name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     try {
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+            txn.exec_params("SELECT m.config_id, m.service_name, m.config_name, m.version, "
+                            "       d.content, m.format, "
                             "       COALESCE(d.content_hash, '') as content_hash, "
                             "       m.created_at, m.created_by "
                             "FROM config_metadata m "
                             "JOIN config_data d ON m.config_id = d.config_id "
-                            "WHERE m.service_name = $1 "
+                            "WHERE m.service_name = $1 AND m.config_name = $2 "
                             "ORDER BY m.version DESC LIMIT 1",
-                            service_name);
+                            service_name, config_name);
 
         txn.commit();
 
@@ -174,26 +179,29 @@ configservice::ConfigData DatabaseManager::GetLatestConfig(const std::string& se
         return ParseConfigRow(r[0]);
 
     } catch (const std::exception& e) {
-        std::cerr << "[DB] GetLatestConfig failed: " << e.what() << std::endl;
+        std::cerr << "[DB] GetLatestConfigByName failed: " << e.what() << std::endl;
         throw;
     }
 }
 
-configservice::ConfigData DatabaseManager::GetActiveConfig(const std::string& service_name) {
+configservice::ConfigData DatabaseManager::GetActiveConfig(const std::string& service_name,
+                                                           const std::string& config_name) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     try {
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+            txn.exec_params("SELECT m.config_id, m.service_name, m.config_name, m.version, "
+                            "       d.content, m.format, "
                             "       COALESCE(d.content_hash, '') as content_hash, "
                             "       m.created_at, m.created_by "
                             "FROM config_metadata m "
                             "JOIN config_data d ON m.config_id = d.config_id "
-                            "WHERE m.service_name = $1 AND m.is_active = true "
+                            "WHERE m.service_name = $1 AND m.config_name = $2 "
+                            "  AND m.is_active = true "
                             "LIMIT 1",
-                            service_name);
+                            service_name, config_name);
 
         txn.commit();
 
@@ -210,14 +218,17 @@ configservice::ConfigData DatabaseManager::GetActiveConfig(const std::string& se
 }
 
 void DatabaseManager::SetActiveConfig(const std::string& service_name,
+                                      const std::string& config_name,
                                       const std::string& config_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     try {
         pqxx::work txn(*conn_);
 
-        txn.exec_params("UPDATE config_metadata SET is_active = false WHERE service_name = $1",
-                        service_name);
+        // Only deactivate within the same named config, not the whole service
+        txn.exec_params("UPDATE config_metadata SET is_active = false "
+                        "WHERE service_name = $1 AND config_name = $2",
+                        service_name, config_name);
         txn.exec_params("UPDATE config_metadata SET is_active = true WHERE config_id = $1",
                         config_id);
         txn.commit();
@@ -231,6 +242,7 @@ void DatabaseManager::SetActiveConfig(const std::string& service_name,
 }
 
 configservice::ConfigData DatabaseManager::GetConfigByVersion(const std::string& service_name,
+                                                              const std::string& config_name,
                                                               int64_t version) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -238,13 +250,15 @@ configservice::ConfigData DatabaseManager::GetConfigByVersion(const std::string&
         pqxx::work txn(*conn_);
 
         pqxx::result r =
-            txn.exec_params("SELECT m.config_id, m.service_name, m.version, d.content, m.format, "
+            txn.exec_params("SELECT m.config_id, m.service_name, m.config_name, m.version, "
+                            "       d.content, m.format, "
                             "       COALESCE(d.content_hash, '') as content_hash, "
                             "       m.created_at, m.created_by "
                             "FROM config_metadata m "
                             "JOIN config_data d ON m.config_id = d.config_id "
-                            "WHERE m.service_name = $1 AND m.version = $2",
-                            service_name, version);
+                            "WHERE m.service_name = $1 AND m.config_name = $2 "
+                            "  AND m.version = $3",
+                            service_name, config_name, version);
 
         txn.commit();
 
@@ -261,7 +275,8 @@ configservice::ConfigData DatabaseManager::GetConfigByVersion(const std::string&
 }
 
 std::vector<configservice::ConfigMetadata> DatabaseManager::ListConfigs(
-    const std::string& service_name, int limit, int offset, int& total_count) {
+    const std::string& service_name, const std::string& config_name, int limit, int offset,
+    int& total_count) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     std::vector<configservice::ConfigMetadata> configs;
@@ -269,32 +284,19 @@ std::vector<configservice::ConfigMetadata> DatabaseManager::ListConfigs(
     try {
         pqxx::work txn(*conn_);
 
-        pqxx::result r;
-        pqxx::result count_r;
+        pqxx::result r =
+            txn.exec_params("SELECT config_id, service_name, config_name, version, format, "
+                            "       created_at, created_by, "
+                            "       COALESCE(description, '') as description, is_active "
+                            "FROM config_metadata "
+                            "WHERE service_name = $1 AND config_name = $2 "
+                            "ORDER BY version DESC "
+                            "LIMIT $3 OFFSET $4",
+                            service_name, config_name, limit, offset);
 
-        if (service_name.empty()) {
-            r = txn.exec_params("SELECT config_id, service_name, version, format, "
-                                "       created_at, created_by, "
-                                "       COALESCE(description, '') as description, is_active "
-                                "FROM config_metadata "
-                                "ORDER BY service_name, version DESC "
-                                "LIMIT $1 OFFSET $2",
-                                limit, offset);
-
-            count_r = txn.exec("SELECT COUNT(*) FROM config_metadata");
-        } else {
-            r = txn.exec_params("SELECT config_id, service_name, version, format, "
-                                "       created_at, created_by, "
-                                "       COALESCE(description, '') as description, is_active "
-                                "FROM config_metadata "
-                                "WHERE service_name = $1 "
-                                "ORDER BY version DESC "
-                                "LIMIT $2 OFFSET $3",
-                                service_name, limit, offset);
-
-            count_r = txn.exec_params(
-                "SELECT COUNT(*) FROM config_metadata WHERE service_name = $1", service_name);
-        }
+        pqxx::result count_r = txn.exec_params("SELECT COUNT(*) FROM config_metadata "
+                                               "WHERE service_name = $1 AND config_name = $2",
+                                               service_name, config_name);
 
         txn.commit();
 
@@ -309,6 +311,58 @@ std::vector<configservice::ConfigMetadata> DatabaseManager::ListConfigs(
     } catch (const std::exception& e) {
         std::cerr << "[DB] ListConfigs failed: " << e.what() << std::endl;
         throw;
+    }
+}
+
+std::vector<configservice::NamedConfigSummary> DatabaseManager::ListNamedConfigs(
+    const std::string& service_name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    std::vector<configservice::NamedConfigSummary> summaries;
+
+    try {
+        pqxx::work txn(*conn_);
+
+        pqxx::result r =
+            txn.exec_params("SELECT cm.service_name, cm.config_name, "
+                            "       MAX(cm.format) AS format, "
+                            "       COUNT(*) AS version_count, "
+                            "       MAX(cm.version) AS latest_version, "
+                            "       MAX(cm.created_at)::text AS latest_updated_at, "
+                            "       EXISTS( "
+                            "         SELECT 1 FROM rollout_state rs "
+                            "         JOIN config_metadata cm2 ON cm2.config_id = rs.config_id "
+                            "         WHERE cm2.service_name = cm.service_name "
+                            "           AND cm2.config_name = cm.config_name "
+                            "           AND rs.status IN ('IN_PROGRESS', 'PENDING') "
+                            "       ) AS has_active_rollout "
+                            "FROM config_metadata cm "
+                            "WHERE cm.service_name = $1 "
+                            "GROUP BY cm.service_name, cm.config_name "
+                            "ORDER BY cm.config_name",
+                            service_name);
+
+        txn.commit();
+
+        for (const auto& row : r) {
+            configservice::NamedConfigSummary s;
+            s.set_service_name(row["service_name"].as<std::string>());
+            s.set_config_name(row["config_name"].as<std::string>());
+            s.set_format(row["format"].as<std::string>("json"));
+            s.set_version_count(row["version_count"].as<int32_t>(0));
+            s.set_latest_version(row["latest_version"].as<int64_t>(0));
+            if (!row["latest_updated_at"].is_null()) {
+                s.set_latest_updated_at(row["latest_updated_at"].as<std::string>());
+            }
+            s.set_has_active_rollout(row["has_active_rollout"].as<bool>(false));
+            summaries.push_back(s);
+        }
+
+        return summaries;
+
+    } catch (const std::exception& e) {
+        std::cerr << "[DB] ListNamedConfigs failed: " << e.what() << std::endl;
+        return summaries;
     }
 }
 
@@ -550,6 +604,9 @@ configservice::ConfigData DatabaseManager::ParseConfigRow(const pqxx::row& row) 
     configservice::ConfigData config;
     config.set_config_id(row["config_id"].as<std::string>());
     config.set_service_name(row["service_name"].as<std::string>());
+    if (row.column_number("config_name") >= 0) {
+        config.set_config_name(row["config_name"].as<std::string>("default"));
+    }
     config.set_version(row["version"].as<int64_t>());
     config.set_content(row["content"].as<std::string>());
     config.set_format(row["format"].as<std::string>());
@@ -574,6 +631,9 @@ configservice::ConfigMetadata DatabaseManager::ParseMetadataRow(const pqxx::row&
     configservice::ConfigMetadata meta;
     meta.set_config_id(row["config_id"].as<std::string>());
     meta.set_service_name(row["service_name"].as<std::string>());
+    if (row.column_number("config_name") >= 0) {
+        meta.set_config_name(row["config_name"].as<std::string>("default"));
+    }
     meta.set_version(row["version"].as<int64_t>());
     meta.set_format(row["format"].as<std::string>());
 
@@ -697,11 +757,12 @@ std::vector<configservice::ServiceSummary> DatabaseManager::ListServices() {
         pqxx::result r = txn.exec("SELECT "
                                   "  cm.service_name, "
                                   "  MAX(cm.version) AS latest_version, "
-                                  "  COUNT(*) AS config_count, "
+                                  "  COUNT(DISTINCT cm.config_name) AS config_count, "
                                   "  MAX(cm.created_at) AS latest_updated_at, "
                                   "  EXISTS( "
                                   "    SELECT 1 FROM rollout_state rs "
-                                  "    WHERE rs.config_id LIKE cm.service_name || '-%' "
+                                  "    JOIN config_metadata cm2 ON cm2.config_id = rs.config_id "
+                                  "    WHERE cm2.service_name = cm.service_name "
                                   "      AND rs.status IN ('IN_PROGRESS', 'PENDING') "
                                   "  ) AS has_active_rollout "
                                   "FROM config_metadata cm "

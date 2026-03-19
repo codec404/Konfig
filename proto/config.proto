@@ -6,9 +6,10 @@ option go_package = "github.com/codec404/Konfig/pkg/pb";
 
 // Configuration data structure
 message ConfigData {
-    string config_id = 1;           // Unique identifier (e.g., "app-config-v3")
+    string config_id = 1;           // Unique identifier (e.g., "svc-db-config-v3")
     string service_name = 2;        // Target service name
-    int64 version = 3;              // Version number
+    string config_name = 9;         // Named config (e.g., "database-config")
+    int64 version = 3;              // Version number within this named config
     string content = 4;             // Actual config content (JSON/YAML/TOML)
     string format = 5;              // Format: "json", "yaml", "toml"
     string content_hash = 6;        // SHA256 hash for integrity
@@ -20,12 +21,24 @@ message ConfigData {
 message ConfigMetadata {
     string config_id = 1;
     string service_name = 2;
+    string config_name = 9;         // Named config
     int64 version = 3;
     string format = 4;
     int64 created_at = 5;
     string created_by = 6;
     string description = 7;
     bool is_active = 8;
+}
+
+// Summary of a named config (one per config_name within a service)
+message NamedConfigSummary {
+    string service_name = 1;
+    string config_name = 2;
+    string format = 3;
+    int32 version_count = 4;        // Total versions stored
+    int64 latest_version = 5;       // Highest version number
+    string latest_updated_at = 6;   // RFC3339 timestamp of the latest version
+    bool has_active_rollout = 7;
 }
 
 // Rollout strategy

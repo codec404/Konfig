@@ -43,12 +43,18 @@ service ConfigAPIService {
 
     // List rollouts with optional status filter
     rpc ListRollouts(ListRolloutsRequest) returns (ListRolloutsResponse);
+
+    // List named configs for a service (one entry per config_name)
+    rpc ListNamedConfigs(ListNamedConfigsRequest) returns (ListNamedConfigsResponse);
 }
 
-// Upload config request
+// Upload config request — creates a new version of a named config.
+// If config_name does not exist yet this creates it at version 1.
+// If it already exists a new version is appended (content required, no blanks).
 message UploadConfigRequest {
     string service_name = 1;
-    string content = 2;             // Config content
+    string config_name = 7;         // Named config (e.g. "database-config") — required
+    string content = 2;             // Config content — required
     string format = 3;              // "json", "yaml", "toml"
     string created_by = 4;          // User/system uploading
     string description = 5;         // Optional description
@@ -74,9 +80,10 @@ message GetConfigResponse {
     string message = 3;
 }
 
-// List configs request
+// List versions of a named config
 message ListConfigsRequest {
     string service_name = 1;
+    string config_name = 4;         // Required: which named config to list versions for
     int32 limit = 2;                // Max results
     int32 offset = 3;               // Pagination offset
 }
@@ -121,10 +128,11 @@ message GetRolloutStatusResponse {
     bool success = 3;
 }
 
-// Rollback request
+// Rollback request — rolls a named config back to a specific version
 message RollbackRequest {
     string service_name = 1;
-    int64 target_version = 2;       // Version to rollback to (0 = previous)
+    string config_name = 3;         // Which named config to roll back
+    int64 target_version = 2;       // Version to rollback to (0 = one before current)
 }
 
 message RollbackResponse {
@@ -218,5 +226,15 @@ message ListRolloutsRequest {
 
 message ListRolloutsResponse {
     repeated RolloutSummary rollouts = 1;
+    bool success = 2;
+}
+
+// List named configs (one per config_name) for a service
+message ListNamedConfigsRequest {
+    string service_name = 1;
+}
+
+message ListNamedConfigsResponse {
+    repeated NamedConfigSummary configs = 1;
     bool success = 2;
 }
