@@ -144,6 +144,8 @@ services:
     build:
       context: ../Konfig-Web-Frontend
       dockerfile: Dockerfile
+      args:
+        VITE_BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
     container_name: konfig-web-frontend
     ports:
       - "3001:80"
