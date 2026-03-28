@@ -105,7 +105,11 @@ services:
       GOOGLE_CLIENT_SECRET: "${GOOGLE_CLIENT_SECRET:-}"
       SUPER_ADMIN_NAME: "${SUPER_ADMIN_NAME:-Super Admin}"
       SUPER_ADMIN_EMAIL: "${SUPER_ADMIN_EMAIL:-admin@konfig.local}"
-      SUPER_ADMIN_PASSWORD: "${SUPER_ADMIN_PASSWORD:-changeme123}"
+      BASE_DOMAIN: "${BASE_DOMAIN:-localhost}"
+      COOKIE_DOMAIN: "${COOKIE_DOMAIN:-}"
+      RESEND_API_KEY: "${RESEND_API_KEY:-}"
+      RESEND_FROM: "${RESEND_FROM:-noreply@konfig.org.in}"
+      DEVELOPER_EMAIL: "${DEVELOPER_EMAIL:-}"
     networks:
       - config-network
     depends_on:
@@ -140,6 +144,8 @@ services:
     build:
       context: ../Konfig-Web-Frontend
       dockerfile: Dockerfile
+      args:
+        VITE_BASE_DOMAIN: ${BASE_DOMAIN:-localhost}
     container_name: konfig-web-frontend
     ports:
       - "3001:80"
