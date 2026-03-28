@@ -24,37 +24,46 @@ make cli
 ## Architecture
 
 ```
-                          ┌──────────────────┐
-                          │ CLI (configctl)  │
-                          │    Go / gRPC     │
-                          └────────┬─────────┘
-                                   │ :8081
-                          ┌────────▼─────────┐
-                          │   API Service    │
-                          │  Upload/Rollout  │
-                          └────────┬─────────┘
-                                   │ Kafka
-                    ┌──────────────┼──────────────┐
-                    │              │              │
-             ┌──────▼──────┐ ┌────▼─────┐ ┌─────▼──────┐
-             │  PostgreSQL  │ │  Redis   │ │Distribution│
-             │  (config,    │ │ (cache)  │ │  Service   │
-             │   rollouts)  │ └──────────┘ │   :8082    │
-             └─────────────┘              └─────┬──────┘
-                                                │ gRPC stream
-                                         ┌──────▼──────┐
-                                         │  Client SDK │
-                                         │  (C++ lib)  │
-                                         └─────────────┘
+  Browser / CLI
+       │
+  ┌────▼─────────────────────────────────────────┐
+  │                 Caddy (TLS)                   │
+  │  example.com  →  web-frontend (React)         │
+  │  *.example.com → web-frontend (org routing)   │
+  │  /api /ws     →  web-backend  :8090           │
+  └────┬──────────────────────────┬───────────────┘
+       │ HTTP/WS                  │ gRPC
+  ┌────▼──────────┐         ┌─────▼──────────────┐
+  │  Web Backend  │         │   C++ gRPC Services │
+  │  (Go :8090)   │◄───────►│  api-service  :8081 │
+  │  JWT + OTP    │         │  dist-service :8082 │
+  │  Org mgmt     │         │  val-service  :8083 │
+  └────┬──────────┘         └─────────────────────┘
+       │                           │ Kafka + PostgreSQL + Redis
+  ┌────▼──────────┐         ┌──────▼──────┐
+  │  web-postgres │         │  PostgreSQL  │
+  │  (auth DB)    │         │  (config DB) │
+  └───────────────┘         └─────────────┘
 ```
 
-### Services
+### Web Layer
+
+| Component | Port | Description |
+|-----------|------|-------------|
+| **Caddy** | 80/443 | TLS termination, subdomain routing, reverse proxy |
+| **Web Backend** | 8090 | Go HTTP/WebSocket gateway — auth, org management, proxies to gRPC |
+| **Web Frontend** | — | React dashboard (served by Caddy from static build) |
+| **web-postgres** | — | Isolated PostgreSQL for auth/session data (internal only) |
+
+### Core Services
 
 | Service | Port | Description |
 |---------|------|-------------|
 | **API Service** | 8081 | Config upload, retrieval, deletion, rollout management |
 | **Distribution Service** | 8082 | Real-time config push to clients via gRPC streaming |
 | **Validation Service** | 8083 | Config syntax/schema/rule validation (JSON & YAML) |
+
+> **Note:** gRPC ports (8081–8083) are internal-only in production (`ports: []` in `docker-compose.prod.yml`). All external traffic goes through the web backend.
 
 ### Infrastructure
 
@@ -239,6 +248,24 @@ Headers are in `include/configclient/`. Libraries are in `lib/` after `make sdk`
 
 **Database credentials:** `configuser` / `configpass` / `configservice`
 
+## Running the Web Dashboard
+
+```bash
+# Start everything (C++ services + web layer + Caddy)
+docker compose up --build -d
+
+# Or bring up only the web layer (assumes C++ services already running)
+docker compose up --build -d caddy web-backend web-frontend web-postgres
+```
+
+For production use `docker-compose.prod.yml` which removes host exposure of internal gRPC ports:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+See [Web Backend README](../Konfig-Web-Backend/README.md) and [Web Frontend README](../Konfig-Web-Frontend/README.md) for configuration details.
+
 ## Documentation
 
 - [CLI Reference](cmd/configctl/README.md) — all commands, flags, rollout strategies
@@ -246,6 +273,8 @@ Headers are in `include/configclient/`. Libraries are in `lib/` after `make sdk`
 - [API Service](src/api-service/README.md) — gRPC API, upload flow, components
 - [Distribution Service](src/distribution-service/README.md) — streaming, rollout execution, heartbeat monitor
 - [Validation Service](src/validation-service/README.md) — schema validation, rules
+- [Web Backend](../Konfig-Web-Backend/README.md) — HTTP/WS gateway, auth, org management, all API routes
+- [Web Frontend](../Konfig-Web-Frontend/README.md) — React dashboard, pages, env vars
 
 ## License
 
