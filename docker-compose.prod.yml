@@ -21,14 +21,19 @@ services:
     restart: unless-stopped
 
   # ── C++ Core ─────────────────────────────────────────────────────────────
+  # gRPC services are internal-only; no host port exposure in prod.
+  # They are reachable inside config-network (web-backend -> api-service:8081 etc.)
 
   api-service:
+    ports: []
     restart: unless-stopped
 
   distribution-service:
+    ports: []
     restart: unless-stopped
 
   validation-service:
+    ports: []
     restart: unless-stopped
 
   # ── Infrastructure ───────────────────────────────────────────────────────
