@@ -1,0 +1,53 @@
+name: Deploy to Production
+
+on:
+  # Triggered directly when a release is cut in THIS repo (infra/migration changes)
+  release:
+    types: [published]
+
+  # Triggered by Konfig-Web-Backend or Konfig-Web-Frontend releasing
+  repository_dispatch:
+    types: [deploy]
+
+  # Manual trigger (escape hatch)
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual deploy"
+        required: false
+        default: "manual"
+
+jobs:
+  deploy:
+    name: SSH → VM → deploy.sh
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log trigger source
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "Triggered by: ${{ github.event.client_payload.repo }} @ ${{ github.event.client_payload.tag }}"
+          elif [ "${{ github.event_name }}" = "release" ]; then
+            echo "Triggered by: Konfig release ${{ github.event.release.tag_name }}"
+          else
+            echo "Triggered by: manual workflow_dispatch (${{ inputs.reason }})"
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          # Timeout: deploy can take a few minutes (docker build)
+          command_timeout: 15m
+          script: |
+            set -euo pipefail
+            cd ${{ secrets.VM_DEPLOY_PATH }}
+            bash scripts/deploy.sh
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Deploy failed. Check VM logs: journalctl -u docker or docker compose logs"
